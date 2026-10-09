@@ -1,0 +1,46 @@
+# Copy to config.yaml and adjust the paths. Nothing else is required.
+#
+# Each backend is a separate checkout with its own virtualenv, because the two
+# Hunyuan3D releases pin incompatible dependency stacks (diffusers 0.40 vs 0.30).
+# They can never share a process, so the router runs them as child processes and
+# talks HTTP to them.
+
+artifacts_dir: ./artifacts
+host: 127.0.0.1
+port: 8070
+
+# The GPU fits one backend at a time, so the router stops the running backend
+# before starting another. Set to the usable VRAM of the card.
+gpu_total_gib: 24.0
+
+# Seconds a loaded backend may sit idle before it is stopped to free VRAM.
+# 0 disables idle shutdown.
+backend_idle_timeout: 900
+
+backends:
+  - name: hy3d2
+    label: "Hunyuan3D 2.0"
+    repo_path: ../Hunyuan3D-2
+    python: ../Hunyuan3D-2/env/bin/python
+    worker: workers/hy3d2_worker.py
+    port: 8071
+    vram_required_gib: 16.0
+    quality: 1          # higher wins when several backends fit
+    capabilities: [albedo]
+    startup_timeout: 600
+    # Worker flags. Use hunyuan3d-paint-v2-0 for better textures at ~20% more time.
+    args: ["--texgen-subfolder", "hunyuan3d-paint-v2-0-turbo"]
+
+  - name: hy3d21
+    label: "Hunyuan3D 2.1 (PBR)"
+    repo_path: ../Hunyuan3D-2.1
+    python: ../Hunyuan3D-2.1/env/bin/python
+    worker: workers/hy3d21_worker.py
+    port: 8072
+    vram_required_gib: 22.0
+    quality: 2
+    capabilities: [albedo, pbr]
+    startup_timeout: 900
+    # max-num-view 6-9 and resolution 512/768 trade quality against VRAM.
+    # 6 / 512 peaks at ~21.8 GiB, which is what fits a 24 GiB card.
+    args: ["--max-num-view", "6", "--resolution", "512"]

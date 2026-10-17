@@ -17,10 +17,28 @@ gpu_total_gib: 24.0
 # 0 disables idle shutdown.
 backend_idle_timeout: 900
 
+# Generated meshes are kept until they breach one of these. Both apply; 0 disables one.
+# Queued and running jobs are never swept.
+retention:
+  max_age_days: 7
+  max_total_gib: 20
+  sweep_interval: 600
+
+# Clients send one of these as "X-API-Key: <key>" or "Authorization: Bearer <key>".
+# Leave empty for an unauthenticated service, which is only permitted on a loopback
+# bind - listening on 0.0.0.0 without keys is refused unless allow_insecure is true.
+# HY3DFORGE_API_KEYS=key1,key2 overrides this, so keys need not live in the file.
+api_keys: []
+allow_insecure: false
+
 backends:
   - name: hy3d2
     label: "Hunyuan3D 2.0"
     repo_path: ../Hunyuan3D-2
+    # `hy3dforge setup` clones this when repo_path is missing. repo_ref pins the
+    # checkout the way a submodule would, without the detached-HEAD workflow.
+    repo_url: https://github.com/Alpsource/Hunyuan3D-2
+    repo_ref: main
     python: ../Hunyuan3D-2/env/bin/python
     worker: workers/hy3d2_worker.py
     port: 8071
@@ -34,6 +52,8 @@ backends:
   - name: hy3d21
     label: "Hunyuan3D 2.1 (PBR)"
     repo_path: ../Hunyuan3D-2.1
+    repo_url: https://github.com/Alpsource/Hunyuan3D-2.1
+    repo_ref: main
     python: ../Hunyuan3D-2.1/env/bin/python
     worker: workers/hy3d21_worker.py
     port: 8072

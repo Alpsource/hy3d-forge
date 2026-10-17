@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .backend import BackendError
 from .models import Job, JobRequest, JobStatus
@@ -69,6 +70,88 @@ class JobQueue:
         pending = [j for j in self._jobs.values() if j.status is JobStatus.queued]
         for position, job in enumerate(sorted(pending, key=lambda j: j.created_at), start=1):
             job.queue_position = position
+
+    def delete(self, job_id: str) -> bool:
+        """Forget a job and remove its files."""
+        job = self._jobs.pop(job_id, None)
+        self._requests.pop(job_id, None)
+        if job is None:
+            return False
+        shutil.rmtree(self.job_dir(job_id), ignore_errors=True)
+        return True
+
+    def _sweepable(self) -> List[tuple]:
+        """Every artifact directory that may be removed, as (timestamp, dir, job_id).
+
+        Covers finished jobs and orphan directories left by a previous run - the job
+        registry is in memory, so after a restart nothing on disk has a job record and
+        those directories would otherwise be kept forever.
+        """
+        finished = {
+            job.id: job for job in self._jobs.values()
+            if job.status in (JobStatus.succeeded, JobStatus.failed)
+        }
+        live = {
+            job.id for job in self._jobs.values()
+            if job.status in (JobStatus.queued, JobStatus.running)
+        }
+
+        entries = []
+        if self.artifacts_dir.exists():
+            for directory in self.artifacts_dir.iterdir():
+                if not directory.is_dir() or directory.name in live:
+                    continue  # never touch work in flight
+                job = finished.get(directory.name)
+                if job is not None:
+                    entries.append(((job.finished_at or job.created_at), directory, job.id))
+                elif directory.name not in self._jobs:
+                    entries.append((directory.stat().st_mtime, directory, None))
+        return sorted(entries)
+
+    def _remove(self, directory: Path, job_id: Optional[str]) -> None:
+        if job_id is not None:
+            self.delete(job_id)
+        else:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def sweep(self, max_age_days: float, max_total_gib: float) -> int:
+        """Apply the retention policy. Queued and running jobs are never removed."""
+        entries = self._sweepable()
+        removed = 0
+
+        if max_age_days > 0:
+            cutoff = time.time() - max_age_days * 86400
+            remaining = []
+            for timestamp, directory, job_id in entries:
+                if timestamp < cutoff:
+                    self._remove(directory, job_id)
+                    removed += 1
+                else:
+                    remaining.append((timestamp, directory, job_id))
+            entries = remaining
+
+        if max_total_gib > 0:
+            limit = max_total_gib * 2 ** 30
+            total = self._artifacts_size()
+            for timestamp, directory, job_id in entries:  # oldest first
+                if total <= limit:
+                    break
+                total -= self._dir_size(directory)
+                self._remove(directory, job_id)
+                removed += 1
+
+        if removed:
+            logger.info("retention sweep removed %d artifact dir(s)", removed)
+        return removed
+
+    @staticmethod
+    def _dir_size(path: Path) -> int:
+        if not path.exists():
+            return 0
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+    def _artifacts_size(self) -> int:
+        return self._dir_size(self.artifacts_dir)
 
     async def _run(self) -> None:
         while True:

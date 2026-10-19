@@ -1,0 +1,19 @@
+{
+    "name": "Hy3dForge.Editor.Tests",
+    "rootNamespace": "Hy3dForge.Editor.Tests",
+    "references": [
+        "Hy3dForge.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "autoReferenced": false
+}

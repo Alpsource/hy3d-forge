@@ -1,0 +1,12 @@
+{
+  "name": "com.alpsource.hy3dforge",
+  "version": "0.1.0",
+  "displayName": "Hy3dForge",
+  "description": "Generate 3D assets from images using a self-hosted Hunyuan3D service, directly in the Unity Editor.",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.unity.cloud.gltfast": "6.13.0"
+  },
+  "keywords": ["3d", "generation", "ai", "mesh", "gltf"],
+  "author": { "name": "Alpsource" }
+}

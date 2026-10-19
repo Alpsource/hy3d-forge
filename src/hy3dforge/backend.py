@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import threading
 import time
 from typing import Any, Dict, Optional
 
@@ -28,6 +29,8 @@ class BackendError(RuntimeError):
 class BackendProcess:
     """Owns one worker subprocess and its HTTP client."""
 
+    _RECENT_LINES = 200
+
     def __init__(self, config: BackendConfig):
         self.config = config
         self._process: Optional[subprocess.Popen] = None
@@ -36,6 +39,8 @@ class BackendProcess:
             timeout=httpx.Timeout(30.0, read=3600.0),  # generation can take minutes
         )
         self.last_used = 0.0
+        self._recent: list[str] = []
+        self._drain: Optional[threading.Thread] = None
 
     @property
     def running(self) -> bool:
@@ -59,8 +64,13 @@ class BackendProcess:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            bufsize=1,
             env=env,
         )
+        # Relay the worker's output as it arrives. Without this it sits unread in the pipe,
+        # so a backend traceback is invisible and only the generic error reaches the client.
+        self._drain = threading.Thread(target=self._relay_output, daemon=True)
+        self._drain.start()
         try:
             await self._await_health(self.config.startup_timeout)
         except Exception:
@@ -68,14 +78,32 @@ class BackendProcess:
             raise
         self.last_used = time.time()
 
+    def _relay_output(self) -> None:
+        """Forward worker stdout/stderr into the router's log, keeping the last lines."""
+        process = self._process
+        if process is None or process.stdout is None:
+            return
+        try:
+            for line in process.stdout:
+                line = line.rstrip()
+                if not line:
+                    continue
+                self._recent.append(line)
+                del self._recent[:-self._RECENT_LINES]
+                logger.info("[%s] %s", self.config.name, line)
+        except Exception:  # the pipe closes when the worker exits
+            pass
+
+    def recent_output(self, lines: int = 20) -> str:
+        return "\n".join(self._recent[-lines:])
+
     async def _await_health(self, timeout: float) -> None:
         deadline = time.time() + timeout
         while time.time() < deadline:
             if not self.running:
-                output = ""
-                if self._process and self._process.stdout:
-                    output = self._process.stdout.read()[-2000:]
-                raise BackendError(f"{self.config.name} exited during startup:\n{output}")
+                raise BackendError(
+                    f"{self.config.name} exited during startup:\n{self.recent_output(40)}"
+                )
             try:
                 response = await self._client.get("/health", timeout=5.0)
                 if response.status_code == 200:
@@ -101,7 +129,10 @@ class BackendProcess:
         response = await self._client.post("/generate", json=payload)
         self.last_used = time.time()
         if response.status_code != 200:
-            raise BackendError(f"{self.config.name}: {response.text[:500]}")
+            raise BackendError(
+                f"{self.config.name}: {response.text[:500]}\n"
+                f"--- recent {self.config.name} output ---\n{self.recent_output(30)}"
+            )
         return response.json()
 
     async def stop(self) -> None:

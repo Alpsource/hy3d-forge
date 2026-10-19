@@ -1,0 +1,15 @@
+{
+    "name": "Hy3dForge.Editor",
+    "rootNamespace": "Hy3dForge.Editor",
+    "references": [
+        "GLTFast",
+        "GLTFast.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": true,
+    "noEngineReferences": false
+}

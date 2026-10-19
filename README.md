@@ -122,6 +122,18 @@ allocation. It then stays resident for `backend_idle_timeout`, so later jobs ski
 loads and releases them in turn. On a larger card, pass `--keep-resident` to the 2.1 worker and
 that cost disappears.
 
+## Unity
+
+A Unity 6 editor package lives in `unity/com.alpsource.hy3dforge`. Install it through the
+Package Manager with:
+
+```
+https://github.com/Alpsource/hy3d-forge.git?path=/unity/com.alpsource.hy3dforge
+```
+
+Pick an image, press Generate, and the mesh is imported into the project. See its
+[README](unity/com.alpsource.hy3dforge/README.md).
+
 ## Retention
 
 Artifacts are swept on a timer so a long-running instance cannot fill the disk:

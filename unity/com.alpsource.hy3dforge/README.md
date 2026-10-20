@@ -58,6 +58,26 @@ files.
 The package is editor-only, enforced by the assembly definition, so none of it can end up in
 a player build.
 
+### Iterating on the package
+
+Consumers install by git URL, but that re-downloads on every change, which is no way to
+work. For development, reference the package by path instead - add this to the test
+project's `Packages/manifest.json`:
+
+```json
+"com.alpsource.hy3dforge": "file:../../hy3d-forge/unity/com.alpsource.hy3dforge"
+```
+
+A `file:` package is referenced in place rather than copied, so edits to the source are the
+same files Unity compiles. Change a `.cs`, switch back to the editor, and it recompiles on
+focus - no reimport, no Package Manager round trip.
+
+Two cases do need more: editing `package.json` (a version or dependency change) means
+re-resolution, so reopen the project; and if the editor ends up in a confused state, close
+it and delete `Library/` for a clean reimport.
+
+### Tests
+
 Tests live under `Tests/Editor` and run in the Test Runner (**Window → General → Test
 Runner**, EditMode), or headlessly:
 

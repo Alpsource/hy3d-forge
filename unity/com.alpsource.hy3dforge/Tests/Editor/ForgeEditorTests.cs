@@ -179,3 +179,112 @@ namespace Hy3dForge.Editor.Tests
         }
     }
 }
+
+namespace Hy3dForge.Editor.Tests
+{
+    public class FolderScannerTests
+    {
+        private static string MakeFolder(params string[] fileNames)
+        {
+            var folder = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "hy3dforge_" + System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(folder);
+            foreach (var name in fileNames)
+            {
+                var full = System.IO.Path.Combine(folder, name);
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full));
+                System.IO.File.WriteAllBytes(full, new byte[] { 1 });
+            }
+
+            return folder;
+        }
+
+        [Test]
+        public void SupportedFormatsAreNotPngOnly()
+        {
+            // The service reads uploads with Pillow; jpg, webp and bmp were verified
+            // end to end against a live backend.
+            Assert.IsTrue(ImageFolderScanner.IsSupported("a.png"));
+            Assert.IsTrue(ImageFolderScanner.IsSupported("a.jpg"));
+            Assert.IsTrue(ImageFolderScanner.IsSupported("a.jpeg"));
+            Assert.IsTrue(ImageFolderScanner.IsSupported("a.webp"));
+            Assert.IsTrue(ImageFolderScanner.IsSupported("a.bmp"));
+        }
+
+        [Test]
+        public void ExtensionMatchingIgnoresCase()
+        {
+            Assert.IsTrue(ImageFolderScanner.IsSupported("A.PNG"));
+            Assert.IsTrue(ImageFolderScanner.IsSupported("B.JPeG"));
+        }
+
+        [Test]
+        public void NonImagesAreRejected()
+        {
+            Assert.IsFalse(ImageFolderScanner.IsSupported("notes.txt"));
+            Assert.IsFalse(ImageFolderScanner.IsSupported("model.glb"));
+            Assert.IsFalse(ImageFolderScanner.IsSupported("noextension"));
+            Assert.IsFalse(ImageFolderScanner.IsSupported(""));
+            Assert.IsFalse(ImageFolderScanner.IsSupported(null));
+        }
+
+        [Test]
+        public void OnlyImagesAreReturned()
+        {
+            var folder = MakeFolder("a.png", "b.jpg", "notes.txt", "c.webp");
+            var found = ImageFolderScanner.Find(folder, false);
+            Assert.AreEqual(3, found.Count);
+            CollectionAssert.AllItemsAreUnique(found);
+        }
+
+        [Test]
+        public void UnityMetaFilesAreIgnored()
+        {
+            var folder = MakeFolder("a.png", "a.png.meta");
+            Assert.AreEqual(1, ImageFolderScanner.Find(folder, false).Count);
+        }
+
+        [Test]
+        public void SubFoldersAreOptional()
+        {
+            var folder = MakeFolder("a.png", System.IO.Path.Combine("nested", "b.png"));
+            Assert.AreEqual(1, ImageFolderScanner.Find(folder, false).Count);
+            Assert.AreEqual(2, ImageFolderScanner.Find(folder, true).Count);
+        }
+
+        [Test]
+        public void ResultsAreSortedSoRunsAreReproducible()
+        {
+            var folder = MakeFolder("c.png", "a.png", "b.png");
+            var found = ImageFolderScanner.Find(folder, false);
+            var sorted = new System.Collections.Generic.List<string>(found);
+            sorted.Sort(System.StringComparer.Ordinal);
+            CollectionAssert.AreEqual(sorted, found);
+        }
+
+        [Test]
+        public void MissingFolderYieldsNothingRatherThanThrowing()
+        {
+            Assert.AreEqual(0, ImageFolderScanner.Find("/definitely/not/here", false).Count);
+            Assert.AreEqual(0, ImageFolderScanner.Find("", false).Count);
+        }
+
+        [Test]
+        public void ContentTypeFollowsTheExtension()
+        {
+            Assert.AreEqual("image/jpeg", ForgeClient.ContentTypeFor("a.jpg"));
+            Assert.AreEqual("image/jpeg", ForgeClient.ContentTypeFor("a.JPEG"));
+            Assert.AreEqual("image/webp", ForgeClient.ContentTypeFor("a.webp"));
+            Assert.AreEqual("image/bmp", ForgeClient.ContentTypeFor("a.bmp"));
+            Assert.AreEqual("image/png", ForgeClient.ContentTypeFor("a.png"));
+            Assert.AreEqual("image/png", ForgeClient.ContentTypeFor("mystery"));
+        }
+
+        [Test]
+        public void ExpectedAssetPathMatchesWhatWriteWouldUse()
+        {
+            Assert.AreEqual("Assets/Out/my_cat.glb",
+                GeneratedAssetWriter.ExpectedAssetPath("Assets/Out", "my cat"));
+        }
+    }
+}

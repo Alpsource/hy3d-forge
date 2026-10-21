@@ -20,12 +20,33 @@ maps wired into the material rather than flattened to albedo.
 
 **Window → Hy3dForge → Generate 3D Asset**
 
-Set the service URL, drop a texture into the Image slot, press Generate. The mesh is written
+Set the service URL, then pick a mode.
+
+**Single** - drop a texture into the Image slot and press Generate. The mesh is written
 to `Assets/Hy3dForge/Generated/` and imported as a prefab you can drag into a scene.
 
 The editor stays responsive while a job runs - generation takes from under a minute to a few
 minutes depending on backend and settings - and the status line shows queue position, then
 progress, then the backend that produced it.
+
+**Batch** - choose a folder and press Generate All. Every supported image in it is
+generated in turn.
+
+The folder can live anywhere on disk, not just inside `Assets`: files are read directly
+rather than through Unity's texture importer, so your source images do not have to be part
+of the project. *Include sub-folders* walks the tree; *Skip already generated* passes over
+inputs whose output already exists, which makes an interrupted run resumable.
+
+A failing image is logged and skipped rather than ending the run, and the window keeps a
+per-image log with a final count of generated, failed and skipped.
+
+### Supported image formats
+
+`png`, `jpg`, `jpeg`, `webp`, `bmp`, `tga`, `tif`, `tiff`.
+
+The service reads uploads with Pillow, so it is not PNG-only. Files are sent byte for byte
+with a content type derived from the extension, so nothing is re-encoded on the way out.
+JPEG, WebP and BMP were verified end to end against a live backend.
 
 ### Options
 

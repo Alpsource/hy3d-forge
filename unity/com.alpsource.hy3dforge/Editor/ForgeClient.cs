@@ -105,13 +105,34 @@ namespace Hy3dForge.Editor
             return JsonUtility.FromJson<BackendList>(wrapped).items;
         }
 
+        /// <summary>
+        /// Map a file name to a MIME type. The service reads the bytes with Pillow, which
+        /// sniffs the real format, but sending an honest content type keeps the upload
+        /// readable to anything in between.
+        /// </summary>
+        internal static string ContentTypeFor(string fileName)
+        {
+            var extension = System.IO.Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
+            switch (extension)
+            {
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".webp": return "image/webp";
+                case ".bmp": return "image/bmp";
+                case ".tga": return "image/x-targa";
+                case ".tif":
+                case ".tiff": return "image/tiff";
+                default: return "image/png";
+            }
+        }
+
         /// <summary>Build the multipart form the service expects. Separated out so it can be tested.</summary>
         internal static List<IMultipartFormSection> BuildForm(
             byte[] image, string fileName, ForgeSettings settings)
         {
             return new List<IMultipartFormSection>
             {
-                new MultipartFormFileSection("image", image, fileName, "image/png"),
+                new MultipartFormFileSection("image", image, fileName, ContentTypeFor(fileName)),
                 new MultipartFormDataSection("backend", settings.backend),
                 new MultipartFormDataSection("require_pbr", settings.requirePbr ? "true" : "false"),
                 new MultipartFormDataSection("texture", settings.texture ? "true" : "false"),

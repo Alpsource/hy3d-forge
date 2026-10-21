@@ -47,6 +47,13 @@ namespace Hy3dForge.Editor
         }
 
         /// <summary>
+        /// Where a given source image would land if nothing else had claimed the name.
+        /// Used to skip inputs that have already been generated.
+        /// </summary>
+        public static string ExpectedAssetPath(string folder, string sourceName)
+            => $"{folder}/{SanitiseName(sourceName)}.glb";
+
+        /// <summary>
         /// Save the GLB under the configured output folder and import it.
         /// Returns the asset path.
         /// </summary>

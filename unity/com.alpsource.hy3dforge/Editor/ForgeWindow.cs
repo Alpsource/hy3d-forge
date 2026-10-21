@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,20 +9,32 @@ using UnityEngine;
 namespace Hy3dForge.Editor
 {
     /// <summary>
-    /// The editor window: pick an image, generate a mesh, import it.
+    /// The editor window: generate a mesh from one image, or from every image in a folder.
     ///
     /// Generation runs asynchronously so the editor stays usable while a job runs - a PBR
     /// job takes minutes, and a frozen Unity for that long is not acceptable.
     /// </summary>
     public sealed class ForgeWindow : EditorWindow
     {
+        private enum Mode { Single, Batch }
+
+        private const string FolderPref = "Hy3dForge.BatchFolder";
+
         private ForgeSettings _settings;
         private Texture2D _sourceImage;
+        private Mode _mode = Mode.Single;
         private Vector2 _scroll;
+        private Vector2 _logScroll;
+
+        private string _batchFolder = string.Empty;
+        private bool _recursive;
+        private bool _skipExisting = true;
+        private int _foundCount = -1;
 
         private string _status = "Idle";
         private string _lastError;
         private string _lastAssetPath;
+        private readonly List<string> _log = new List<string>();
         private bool _busy;
         private CancellationTokenSource _cancellation;
         private string _apiKeyField = string.Empty;
@@ -31,7 +44,7 @@ namespace Hy3dForge.Editor
         {
             var window = GetWindow<ForgeWindow>();
             window.titleContent = new GUIContent("Hy3dForge");
-            window.minSize = new Vector2(340, 440);
+            window.minSize = new Vector2(360, 520);
             window.Show();
         }
 
@@ -39,6 +52,7 @@ namespace Hy3dForge.Editor
         {
             _settings = ForgeSettings.GetOrCreate();
             _apiKeyField = ForgeSettings.ApiKey;
+            _batchFolder = EditorPrefs.GetString(FolderPref, string.Empty);
         }
 
         private void OnDisable() => _cancellation?.Cancel();
@@ -52,6 +66,41 @@ namespace Hy3dForge.Editor
                 _settings = ForgeSettings.GetOrCreate();
             }
 
+            DrawService();
+            EditorGUILayout.Space();
+
+            using (new EditorGUI.DisabledScope(_busy))
+            {
+                _mode = (Mode)GUILayout.Toolbar((int)_mode, new[] { "Single", "Batch" });
+            }
+
+            EditorGUILayout.Space();
+            if (_mode == Mode.Single)
+            {
+                DrawSingleInput();
+            }
+            else
+            {
+                DrawBatchInput();
+            }
+
+            EditorGUILayout.Space();
+            DrawOptions();
+            EditorGUILayout.Space();
+            DrawActions();
+            EditorGUILayout.Space();
+            DrawStatus();
+
+            EditorGUILayout.EndScrollView();
+
+            if (GUI.changed && !_busy)
+            {
+                EditorUtility.SetDirty(_settings);
+            }
+        }
+
+        private void DrawService()
+        {
             EditorGUILayout.LabelField("Service", EditorStyles.boldLabel);
             using (new EditorGUI.DisabledScope(_busy))
             {
@@ -63,21 +112,78 @@ namespace Hy3dForge.Editor
                 {
                     ForgeSettings.ApiKey = _apiKeyField;
                 }
-
-                EditorGUILayout.HelpBox(
-                    "The key is stored in EditorPrefs on this machine only, never in the project.",
-                    MessageType.None);
             }
+        }
 
-            EditorGUILayout.Space();
+        private void DrawSingleInput()
+        {
             EditorGUILayout.LabelField("Input", EditorStyles.boldLabel);
             using (new EditorGUI.DisabledScope(_busy))
             {
                 _sourceImage = (Texture2D)EditorGUILayout.ObjectField(
                     "Image", _sourceImage, typeof(Texture2D), false);
             }
+        }
 
-            EditorGUILayout.Space();
+        private void DrawBatchInput()
+        {
+            EditorGUILayout.LabelField("Input folder", EditorStyles.boldLabel);
+            using (new EditorGUI.DisabledScope(_busy))
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUI.BeginChangeCheck();
+                _batchFolder = EditorGUILayout.TextField(_batchFolder);
+                if (GUILayout.Button("Browse", GUILayout.Width(70)))
+                {
+                    var chosen = EditorUtility.OpenFolderPanel(
+                        "Folder of images", _batchFolder, string.Empty);
+                    if (!string.IsNullOrEmpty(chosen))
+                    {
+                        _batchFolder = chosen;
+                        GUI.FocusControl(null);
+                    }
+                }
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorPrefs.SetString(FolderPref, _batchFolder);
+                    _foundCount = -1;
+                }
+
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUI.BeginChangeCheck();
+                _recursive = EditorGUILayout.Toggle("Include sub-folders", _recursive);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    _foundCount = -1;
+                }
+
+                _skipExisting = EditorGUILayout.Toggle("Skip already generated", _skipExisting);
+            }
+
+            if (_foundCount < 0 && !string.IsNullOrEmpty(_batchFolder))
+            {
+                _foundCount = ImageFolderScanner.Find(_batchFolder, _recursive).Count;
+            }
+
+            if (!string.IsNullOrEmpty(_batchFolder) && !Directory.Exists(_batchFolder))
+            {
+                EditorGUILayout.HelpBox("That folder does not exist.", MessageType.Warning);
+            }
+            else if (_foundCount >= 0)
+            {
+                EditorGUILayout.HelpBox(
+                    $"{_foundCount} image(s) found.\nSupported: {ImageFolderScanner.SupportedExtensionsLabel}",
+                    _foundCount > 0 ? MessageType.Info : MessageType.Warning);
+            }
+
+            // The folder may live anywhere: files are read from disk, not through Unity's
+            // importer, so inputs do not have to be inside Assets.
+        }
+
+        private void DrawOptions()
+        {
             EditorGUILayout.LabelField("Options", EditorStyles.boldLabel);
             using (new EditorGUI.DisabledScope(_busy))
             {
@@ -90,13 +196,27 @@ namespace Hy3dForge.Editor
                     "Octree resolution", _settings.octreeResolution, 16, 512);
                 _settings.seed = EditorGUILayout.IntField("Seed", _settings.seed);
             }
+        }
 
-            EditorGUILayout.Space();
-            using (new EditorGUI.DisabledScope(_busy || _sourceImage == null))
+        private void DrawActions()
+        {
+            var canRun = _mode == Mode.Single
+                ? _sourceImage != null
+                : _foundCount > 0;
+
+            using (new EditorGUI.DisabledScope(_busy || !canRun))
             {
-                if (GUILayout.Button("Generate", GUILayout.Height(30)))
+                var label = _mode == Mode.Single ? "Generate" : $"Generate All ({Math.Max(_foundCount, 0)})";
+                if (GUILayout.Button(label, GUILayout.Height(30)))
                 {
-                    _ = GenerateAsync();
+                    if (_mode == Mode.Single)
+                    {
+                        _ = RunSingleAsync();
+                    }
+                    else
+                    {
+                        _ = RunBatchAsync();
+                    }
                 }
             }
 
@@ -104,8 +224,10 @@ namespace Hy3dForge.Editor
             {
                 _cancellation?.Cancel();
             }
+        }
 
-            EditorGUILayout.Space();
+        private void DrawStatus()
+        {
             EditorGUILayout.LabelField("Status", EditorStyles.boldLabel);
             EditorGUILayout.LabelField(_status, EditorStyles.wordWrappedLabel);
 
@@ -123,26 +245,32 @@ namespace Hy3dForge.Editor
                 }
             }
 
-            EditorGUILayout.EndScrollView();
-
-            if (GUI.changed && !_busy)
+            if (_log.Count == 0)
             {
-                EditorUtility.SetDirty(_settings);
+                return;
             }
+
+            EditorGUILayout.LabelField("Log", EditorStyles.boldLabel);
+            _logScroll = EditorGUILayout.BeginScrollView(_logScroll, GUILayout.Height(120));
+            foreach (var line in _log)
+            {
+                EditorGUILayout.LabelField(line, EditorStyles.miniLabel);
+            }
+
+            EditorGUILayout.EndScrollView();
         }
 
-        /// <summary>Read the selected texture as PNG bytes, regardless of its import settings.</summary>
-        private static byte[] ReadImageBytes(Texture2D texture)
+        /// <summary>Read an image as bytes. PNG assets are sent untouched; others re-encode.</summary>
+        private static byte[] ReadTextureBytes(Texture2D texture)
         {
             var path = AssetDatabase.GetAssetPath(texture);
-            if (!string.IsNullOrEmpty(path) && File.Exists(path) &&
-                path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(path) && File.Exists(path) && ImageFolderScanner.IsSupported(path))
             {
-                // Use the original file: it avoids the readable/compressed import dance.
+                // Send the original file: it avoids the readable/compressed import dance,
+                // and the service reads every format in the supported list.
                 return File.ReadAllBytes(path);
             }
 
-            // Fall back to re-encoding, which needs a readable copy.
             var temporary = RenderTexture.GetTemporary(
                 texture.width, texture.height, 0, RenderTextureFormat.ARGB32);
             Graphics.Blit(texture, temporary);
@@ -159,48 +287,51 @@ namespace Hy3dForge.Editor
             return bytes;
         }
 
-        private async Task GenerateAsync()
+        /// <summary>Submit one image, wait for it, download and import. Shared by both modes.</summary>
+        private async Task<string> GenerateOneAsync(
+            ForgeClient client, byte[] bytes, string fileName, string assetName,
+            string prefix, CancellationToken token)
         {
-            _busy = true;
-            _lastError = null;
-            _lastAssetPath = null;
-            _cancellation = new CancellationTokenSource();
-            var token = _cancellation.Token;
+            SetStatus($"{prefix}Submitting {assetName}...");
+            var job = await client.SubmitAsync(bytes, fileName, _settings, token);
 
+            var progress = new Progress<ForgeJob>(update =>
+            {
+                SetStatus(update.status == "queued"
+                    ? $"{prefix}{assetName}: queued (position {update.queue_position})..."
+                    : $"{prefix}{assetName}: generating on {update.backend ?? "?"}...");
+            });
+
+            job = await client.WaitForCompletionAsync(job.id, _settings.timeoutSeconds, progress, token);
+            if (!job.Succeeded)
+            {
+                throw new ForgeException(job.error ?? "Generation failed.");
+            }
+
+            SetStatus($"{prefix}{assetName}: downloading...");
+            var glb = await client.DownloadResultAsync(job.id, token);
+
+            SetStatus($"{prefix}{assetName}: importing...");
+            return GeneratedAssetWriter.Write(glb, assetName, _settings);
+        }
+
+        private async Task RunSingleAsync()
+        {
+            BeginRun();
             try
             {
                 _settings.Validate();
                 var client = new ForgeClient(_settings.NormalisedBaseUrl, ForgeSettings.ApiKey);
+                var bytes = ReadTextureBytes(_sourceImage);
+                var sourcePath = AssetDatabase.GetAssetPath(_sourceImage);
+                var fileName = string.IsNullOrEmpty(sourcePath)
+                    ? $"{_sourceImage.name}.png"
+                    : Path.GetFileName(sourcePath);
 
-                SetStatus("Reading image...");
-                var bytes = ReadImageBytes(_sourceImage);
-                var name = _sourceImage.name;
-
-                SetStatus("Submitting...");
-                var job = await client.SubmitAsync(bytes, $"{name}.png", _settings, token);
-
-                var progress = new Progress<ForgeJob>(update =>
-                {
-                    SetStatus(update.status == "queued"
-                        ? $"Queued (position {update.queue_position})..."
-                        : $"Generating on {update.backend ?? "?"}...");
-                });
-
-                job = await client.WaitForCompletionAsync(
-                    job.id, _settings.timeoutSeconds, progress, token);
-
-                if (!job.Succeeded)
-                {
-                    throw new ForgeException(job.error ?? "Generation failed.");
-                }
-
-                SetStatus("Downloading...");
-                var glb = await client.DownloadResultAsync(job.id, token);
-
-                SetStatus("Importing...");
-                _lastAssetPath = GeneratedAssetWriter.Write(glb, name, _settings);
+                _lastAssetPath = await GenerateOneAsync(
+                    client, bytes, fileName, _sourceImage.name, string.Empty, _cancellation.Token);
                 GeneratedAssetWriter.Reveal(_lastAssetPath);
-                SetStatus($"Done on {job.backend}.");
+                SetStatus("Done.");
             }
             catch (OperationCanceledException)
             {
@@ -214,11 +345,103 @@ namespace Hy3dForge.Editor
             }
             finally
             {
-                _busy = false;
-                _cancellation?.Dispose();
-                _cancellation = null;
-                Repaint();
+                EndRun();
             }
+        }
+
+        private async Task RunBatchAsync()
+        {
+            BeginRun();
+            var succeeded = 0;
+            var failed = 0;
+            var skipped = 0;
+
+            try
+            {
+                _settings.Validate();
+                var client = new ForgeClient(_settings.NormalisedBaseUrl, ForgeSettings.ApiKey);
+                var images = ImageFolderScanner.Find(_batchFolder, _recursive);
+                Log($"Found {images.Count} image(s) in {_batchFolder}");
+
+                for (var index = 0; index < images.Count; index++)
+                {
+                    _cancellation.Token.ThrowIfCancellationRequested();
+
+                    var path = images[index];
+                    var assetName = Path.GetFileNameWithoutExtension(path);
+                    var prefix = $"[{index + 1}/{images.Count}] ";
+
+                    if (_skipExisting &&
+                        File.Exists(GeneratedAssetWriter.ExpectedAssetPath(_settings.outputFolder, assetName)))
+                    {
+                        skipped++;
+                        Log($"{prefix}{assetName}: skipped, already generated");
+                        continue;
+                    }
+
+                    try
+                    {
+                        var bytes = File.ReadAllBytes(path);
+                        var asset = await GenerateOneAsync(
+                            client, bytes, Path.GetFileName(path), assetName, prefix, _cancellation.Token);
+                        _lastAssetPath = asset;
+                        succeeded++;
+                        Log($"{prefix}{assetName}: done -> {asset}");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception error)
+                    {
+                        // One bad image must not end the run.
+                        failed++;
+                        Log($"{prefix}{assetName}: FAILED - {error.Message}");
+                        Debug.LogWarning($"Hy3dForge: {assetName} failed: {error.Message}");
+                    }
+                }
+
+                SetStatus($"Batch finished: {succeeded} generated, {failed} failed, {skipped} skipped.");
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus($"Cancelled after {succeeded} generated, {failed} failed, {skipped} skipped.");
+            }
+            catch (Exception error)
+            {
+                _lastError = error.Message;
+                SetStatus("Batch failed to start.");
+                Debug.LogException(error);
+            }
+            finally
+            {
+                AssetDatabase.Refresh();
+                EndRun();
+            }
+        }
+
+        private void BeginRun()
+        {
+            _busy = true;
+            _lastError = null;
+            _lastAssetPath = null;
+            _log.Clear();
+            _cancellation = new CancellationTokenSource();
+        }
+
+        private void EndRun()
+        {
+            _busy = false;
+            _cancellation?.Dispose();
+            _cancellation = null;
+            _foundCount = -1;
+            Repaint();
+        }
+
+        private void Log(string line)
+        {
+            _log.Add(line);
+            Repaint();
         }
 
         private void SetStatus(string message)

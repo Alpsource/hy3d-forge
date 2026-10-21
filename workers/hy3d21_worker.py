@@ -43,13 +43,23 @@ except Exception as error:  # pragma: no cover
 _resident = {}
 
 
-def _free(*objects):
+def _release_vram(label=""):
+    """Return freed blocks to the driver.
+
+    The caller must drop its own reference first. Passing an object into a helper and
+    deleting it there frees nothing: the caller's variable still holds it, and so does the
+    helper's argument tuple, so the allocation survives and empty_cache() has nothing to
+    reclaim.
+    """
     import torch
 
-    for obj in objects:
-        del obj
     gc.collect()
     torch.cuda.empty_cache()
+    if label:
+        allocated = torch.cuda.memory_allocated() / 2 ** 30
+        reserved = torch.cuda.memory_reserved() / 2 ** 30
+        print(f"[{NAME}] vram after {label}: allocated {allocated:.1f} GiB, "
+              f"reserved {reserved:.1f} GiB", flush=True)
 
 
 def _shape_pipeline():
@@ -101,6 +111,7 @@ def generate(payload):
 
     step = time.time()
     shape = _shape_pipeline()
+    _release_vram("shape loaded")
     mesh = shape(image=image)[0]
     stats["shape_seconds"] = round(time.time() - step, 1)
 
@@ -111,7 +122,8 @@ def generate(payload):
     white_path = output_dir / "white_mesh.glb"
     mesh.export(white_path)
     if not OPTS.keep_resident:
-        _free(shape)  # release ~10 GiB before the paint stage claims ~22 GiB
+        shape = None  # drop the last reference before reclaiming
+        _release_vram("shape released")
 
     if not bool(params.get("texture", True)):
         stats.update(total_seconds=round(time.time() - started, 1),
@@ -125,13 +137,14 @@ def generate(payload):
           output_mesh_path=str(output_obj), save_glb=True)
     stats["texture_seconds"] = round(time.time() - step, 1)
     if not OPTS.keep_resident:
-        _free(paint)
+        paint = None
+        _release_vram("paint released")
 
     output_path = output_obj.with_suffix(".glb")
     if not output_path.exists():
         raise RuntimeError(f"paint stage produced no GLB at {output_path}")
 
-    torch.cuda.empty_cache()
+    _release_vram("job complete")
     stats.update(total_seconds=round(time.time() - started, 1), faces=len(mesh.faces),
                  backend=NAME, pbr=True, views=OPTS.max_num_view, resolution=OPTS.resolution)
     return {"output_path": str(output_path), "stats": stats}

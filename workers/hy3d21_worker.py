@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from worker_common import run_worker  # noqa: E402
+from worker_common import prepare_image, run_worker  # noqa: E402
 
 # The repo's own modules expect to be importable from the checkout root.
 sys.path.insert(0, ".")
@@ -103,9 +103,10 @@ def generate(payload):
     stats, started = {}, time.time()
 
     image_path = payload["image_path"]
-    image = Image.open(image_path)
-    if image.mode != "RGBA" or image.getextrema()[3][0] == 255:
-        image = BackgroundRemover()(image.convert("RGB"))
+    original = Image.open(image_path)
+    image = prepare_image(original, params.get("remove_background", "auto"), BackgroundRemover())
+    if image is not original:
+        # The paint stage takes a path, so the cut-out has to exist on disk.
         image_path = str(output_dir / "input_rgba.png")
         image.save(image_path)
 

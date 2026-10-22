@@ -19,8 +19,17 @@ class JobStatus(str, Enum):
     failed = "failed"
 
 
+class RemoveBackground(str, Enum):
+    """How the input image is cut out before shape generation."""
+
+    auto = "auto"      # cut out unless the image already carries real transparency
+    always = "always"  # cut out regardless
+    never = "never"    # use the image exactly as given
+
+
 class GenerateParams(BaseModel):
     texture: bool = True
+    remove_background: RemoveBackground = RemoveBackground.auto
     target_face_num: int = Field(10000, ge=0, le=1_000_000)
     steps: int = Field(30, ge=1, le=200)
     guidance_scale: float = 5.0

@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from .backend import BackendError
 from .config import Settings, load_settings
 from .jobs import JobQueue
-from .models import BackendInfo, Job, JobRequest, JobStatus
+from .models import BackendInfo, Job, JobRequest, JobStatus, RemoveBackground
 from .registry import BackendRegistry
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,7 @@ def _job_request_form(
     backend: str = Form("auto"),
     require_pbr: bool = Form(False),
     texture: bool = Form(True),
+    remove_background: RemoveBackground = Form(RemoveBackground.auto),
     target_face_num: int = Form(10000),
     steps: int = Form(30),
     guidance_scale: float = Form(5.0),
@@ -146,6 +147,7 @@ def _job_request_form(
         backend=backend,
         require_pbr=require_pbr,
         texture=texture,
+        remove_background=remove_background,
         target_face_num=target_face_num,
         steps=steps,
         guidance_scale=guidance_scale,

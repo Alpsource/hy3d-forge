@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from worker_common import run_worker  # noqa: E402
+from worker_common import prepare_image, run_worker  # noqa: E402
 
 NAME = "hy3d2"
 
@@ -63,8 +63,7 @@ def generate(payload):
     stats, started = {}, time.time()
 
     image = Image.open(payload["image_path"])
-    if image.mode != "RGBA" or image.getextrema()[3][0] == 255:
-        image = state["rembg"](image.convert("RGB"))
+    image = prepare_image(image, params.get("remove_background", "auto"), state["rembg"])
 
     step = time.time()
     mesh = state["shape"](

@@ -61,3 +61,30 @@ def test_result_before_completion_is_conflict(tmp_path):
     with build_client(tmp_path) as client:
         job = client.post("/v1/jobs", files={"image": ("a.png", b"x", "image/png")}).json()
         assert client.get(f"/v1/jobs/{job['id']}/result").status_code in {409, 404}
+
+
+def test_remove_background_defaults_to_auto(tmp_path):
+    from hy3dforge.models import JobRequest, RemoveBackground
+
+    assert JobRequest().remove_background is RemoveBackground.auto
+
+
+def test_remove_background_accepts_each_mode(tmp_path):
+    with build_client(tmp_path) as client:
+        for mode in ("auto", "always", "never"):
+            response = client.post(
+                "/v1/jobs",
+                files={"image": ("a.png", b"data", "image/png")},
+                data={"backend": "small", "remove_background": mode},
+            )
+            assert response.status_code == 202, mode
+
+
+def test_unknown_remove_background_mode_is_rejected(tmp_path):
+    with build_client(tmp_path) as client:
+        response = client.post(
+            "/v1/jobs",
+            files={"image": ("a.png", b"data", "image/png")},
+            data={"backend": "small", "remove_background": "sometimes"},
+        )
+        assert response.status_code == 422

@@ -136,6 +136,8 @@ namespace Hy3dForge.Editor
                 new MultipartFormDataSection("backend", settings.backend),
                 new MultipartFormDataSection("require_pbr", settings.requirePbr ? "true" : "false"),
                 new MultipartFormDataSection("texture", settings.texture ? "true" : "false"),
+                new MultipartFormDataSection("remove_background",
+                    settings.removeBackground.ToString().ToLowerInvariant()),
                 new MultipartFormDataSection("target_face_num", settings.targetFaceNum.ToString()),
                 new MultipartFormDataSection("steps", settings.steps.ToString()),
                 new MultipartFormDataSection("guidance_scale",

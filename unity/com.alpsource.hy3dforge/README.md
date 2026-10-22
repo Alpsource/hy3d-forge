@@ -40,6 +40,10 @@ inputs whose output already exists, which makes an interrupted run resumable.
 A failing image is logged and skipped rather than ending the run, and the window keeps a
 per-image log with a final count of generated, failed and skipped.
 
+`Auto` decides by looking at the alpha channel, so an image that *has* an alpha channel is
+taken to be a finished cutout even if the background is still painted into it. If a
+generation comes out misshapen, that is the usual cause - set **Always** and try again.
+
 ### Supported image formats
 
 `png`, `jpg`, `jpeg`, `webp`, `bmp`, `tga`, `tif`, `tiff`.
@@ -55,6 +59,7 @@ JPEG, WebP and BMP were verified end to end against a live backend.
 | Backend | `auto`, or a specific backend name such as `hy3d2` / `hy3d21` |
 | Require PBR | restrict `auto` to backends that emit metallic/roughness maps |
 | Texture | off generates untextured geometry, which is much faster |
+| Remove background | `Auto` cuts out unless the image already has transparency; `Always` forces it; `Never` sends the image untouched |
 | Target faces | decimation target; applied before texturing so UVs stay valid |
 | Steps, Octree resolution, Seed | diffusion settings passed through to the service |
 

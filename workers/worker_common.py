@@ -23,6 +23,26 @@ from typing import Any, Callable, Dict
 MAX_BODY_BYTES = 1 * 1024 * 1024
 
 
+def prepare_image(image, mode, rembg):
+    """Apply background removal according to `mode`.
+
+    "auto"   - cut out unless the image already carries real transparency
+    "always" - cut out regardless, for a cutout that still has background baked in
+    "never"  - use the image exactly as given
+
+    "auto" only inspects the alpha channel, so an RGBA image whose alpha is partly
+    transparent is taken to be a finished cutout even when it is not. That is the case
+    "always" exists for.
+    """
+    if mode == "never":
+        return image
+    if mode == "always":
+        return rembg(image.convert("RGB"))
+
+    already_cut_out = image.mode == "RGBA" and image.getextrema()[3][0] < 255
+    return image if already_cut_out else rembg(image.convert("RGB"))
+
+
 def run_worker(name: str, generate: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:
     """Serve `generate` over HTTP until terminated."""
     parser = argparse.ArgumentParser()

@@ -4,6 +4,14 @@ using UnityEngine;
 
 namespace Hy3dForge.Editor
 {
+    /// <summary>How the service should cut out the input image.</summary>
+    public enum RemoveBackground
+    {
+        Auto,
+        Always,
+        Never,
+    }
+
     /// <summary>
     /// Project-level settings for the generation service.
     ///
@@ -29,6 +37,11 @@ namespace Hy3dForge.Editor
         public bool requirePbr;
 
         public bool texture = true;
+
+        [Tooltip("Auto cuts out the background unless the image already has transparency. " +
+                 "Always forces it, for a cutout that still has background baked in. " +
+                 "Never sends the image untouched.")]
+        public RemoveBackground removeBackground = RemoveBackground.Auto;
 
         [Range(0, 1000000)]
         public int targetFaceNum = 10000;

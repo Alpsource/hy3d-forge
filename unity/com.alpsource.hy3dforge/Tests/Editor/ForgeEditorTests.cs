@@ -288,3 +288,38 @@ namespace Hy3dForge.Editor.Tests
         }
     }
 }
+
+namespace Hy3dForge.Editor.Tests
+{
+    public class RemoveBackgroundTests
+    {
+        private static string Section(ForgeSettings settings, string name)
+        {
+            var form = ForgeClient.BuildForm(new byte[] { 1 }, "a.png", settings);
+            return System.Text.Encoding.UTF8.GetString(
+                form.First(s => s.sectionName == name).sectionData);
+        }
+
+        [Test]
+        public void DefaultIsAuto()
+        {
+            var settings = ScriptableObject.CreateInstance<ForgeSettings>();
+            Assert.AreEqual(RemoveBackground.Auto, settings.removeBackground);
+        }
+
+        [Test]
+        public void ModeIsSentLowercaseToMatchTheApi()
+        {
+            var settings = ScriptableObject.CreateInstance<ForgeSettings>();
+
+            settings.removeBackground = RemoveBackground.Always;
+            Assert.AreEqual("always", Section(settings, "remove_background"));
+
+            settings.removeBackground = RemoveBackground.Never;
+            Assert.AreEqual("never", Section(settings, "remove_background"));
+
+            settings.removeBackground = RemoveBackground.Auto;
+            Assert.AreEqual("auto", Section(settings, "remove_background"));
+        }
+    }
+}

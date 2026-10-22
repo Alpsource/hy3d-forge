@@ -101,8 +101,13 @@ curl http://127.0.0.1:8070/v1/jobs/<id>
 curl -o model.glb http://127.0.0.1:8070/v1/jobs/<id>/result
 ```
 
-Options: `backend` (`auto` | a name), `require_pbr`, `texture`, `target_face_num`, `steps`,
-`guidance_scale`, `octree_resolution`, `seed`.
+Options: `backend` (`auto` | a name), `require_pbr`, `texture`, `remove_background`
+(`auto` | `always` | `never`), `target_face_num`, `steps`, `guidance_scale`,
+`octree_resolution`, `seed`.
+
+`remove_background=auto` runs the cutout unless the image already carries transparency.
+That check only inspects the alpha channel, so an image with an alpha channel but a
+background still painted in is wrongly treated as finished; `always` forces the cutout.
 
 `backend=auto` picks the highest `quality` backend whose `vram_required_gib` fits
 `gpu_total_gib`, filtered by `require_pbr`. Lower the VRAM budget and it degrades to a smaller

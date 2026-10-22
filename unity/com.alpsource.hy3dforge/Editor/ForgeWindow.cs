@@ -190,6 +190,8 @@ namespace Hy3dForge.Editor
                 _settings.backend = EditorGUILayout.TextField("Backend", _settings.backend);
                 _settings.requirePbr = EditorGUILayout.Toggle("Require PBR", _settings.requirePbr);
                 _settings.texture = EditorGUILayout.Toggle("Texture", _settings.texture);
+                _settings.removeBackground = (RemoveBackground)EditorGUILayout.EnumPopup(
+                    "Remove background", _settings.removeBackground);
                 _settings.targetFaceNum = EditorGUILayout.IntField("Target faces", _settings.targetFaceNum);
                 _settings.steps = EditorGUILayout.IntSlider("Steps", _settings.steps, 1, 100);
                 _settings.octreeResolution = EditorGUILayout.IntSlider(

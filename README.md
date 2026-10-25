@@ -75,6 +75,30 @@ its virtualenv and compile its CUDA extensions, and verifies the result. Existin
 are detected and left untouched, so an already-working tree keeps working. Install a subset
 with `--backend hy3d2`, which is worth doing if you only have VRAM for the smaller model.
 
+### The backends' licences are not this project's to grant
+
+Before cloning a backend, `setup` prints that backend's licence, its URL and the restrictions
+worth knowing, and will not continue until you type `accept`. A scripted install must pass
+`--accept-licenses`; with no terminal to prompt, setup refuses rather than let a pipeline
+accept a licence by not noticing it was asked. An existing checkout is never gated - whoever
+put it there already obtained it.
+
+This matters because **hy3dforge sublicenses nothing**. This repository contains no model code;
+the backends are separate checkouts fetched from their own upstreams, so whoever installs one
+is that licence's licensee. For both Hunyuan3D backends that licence is Tencent's Community
+License, and two of its terms decide what you can build on it:
+
+- **It does not apply in the EU, the UK or South Korea**, and the exclusion covers *Output*,
+  not just the weights. Generating for a user in those territories is outside the grant, and
+  hosting elsewhere does not change where the output is used.
+- **Above 1 million monthly active users** you must request a separate licence from
+  `hunyuan3d@tencent.com` before exercising any rights.
+
+Commercial use is otherwise permitted. If you are building something that serves those
+territories, that is a reason to add a permissively licensed backend rather than a reason to
+read the clause more creatively - the declaration lives in `config.yaml`, so a backend under
+MIT simply says so and the prompt reflects it.
+
 **Why not git submodules.** They pin a commit, which is the one thing they do well, but the
 backends here are forks you push branches from, and submodules check out a detached HEAD -
 every change becomes "cd in, checkout a branch, commit, push, go back, update the pointer".

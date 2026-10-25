@@ -32,6 +32,13 @@ class BackendConfig(BaseModel):
     startup_timeout: float = 600.0
     # Extra CLI flags handed to the worker script, e.g. ["--texgen-subfolder", "..."]
     args: List[str] = Field(default_factory=list)
+    # Shown and acknowledged before `hy3dforge setup` clones this backend on someone's
+    # behalf. The model weights carry their own terms, which are not this project's to
+    # grant: whoever runs the backend is the licensee, so they have to see them first.
+    license: str = ""
+    license_url: str = ""
+    # The restrictions worth reading before installing, not a summary of the whole licence.
+    license_notes: List[str] = Field(default_factory=list)
 
     @property
     def supports_pbr(self) -> bool:

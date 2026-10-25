@@ -21,6 +21,9 @@ def main() -> None:
     parser.add_argument("--log-level", default="info")
     parser.add_argument("--backend", action="append", dest="backends",
                         help="setup: only this backend (repeatable)")
+    parser.add_argument("--accept-licenses", action="store_true",
+                        help="setup: accept the backends' third-party licences without "
+                             "prompting, for a scripted install")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -30,7 +33,7 @@ def main() -> None:
     settings = load_settings(args.config)
 
     if args.command == "setup":
-        raise SystemExit(setup(settings, args.backends))
+        raise SystemExit(setup(settings, args.backends, args.accept_licenses))
 
     if args.host:
         settings.host = args.host

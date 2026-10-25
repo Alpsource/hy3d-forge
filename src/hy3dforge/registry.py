@@ -25,7 +25,7 @@ class BackendRegistry:
         self._active: Optional[str] = None
         self._lock = asyncio.Lock()
 
-    def select(self, requested: str, require_pbr: bool) -> str:
+    def select(self, requested: str, require_pbr: bool, require_text: bool = False) -> str:
         """Resolve a backend name, or pick the best one that fits the GPU."""
         if requested != "auto":
             config = self.settings.backend(requested)
@@ -33,15 +33,19 @@ class BackendRegistry:
                 raise BackendError(f"unknown backend '{requested}'")
             if require_pbr and not config.supports_pbr:
                 raise BackendError(f"backend '{requested}' cannot produce PBR maps")
+            if require_text and not config.supports_text:
+                raise BackendError(f"backend '{requested}' cannot generate from a text prompt")
             return requested
 
         candidates = [
             b for b in self.settings.backends
             if b.vram_required_gib <= self.settings.gpu_total_gib
             and (not require_pbr or b.supports_pbr)
+            and (not require_text or b.supports_text)
         ]
         if not candidates:
-            detail = " with PBR support" if require_pbr else ""
+            wants = [w for w, on in (("PBR", require_pbr), ("text prompt", require_text)) if on]
+            detail = f" supporting {' and '.join(wants)}" if wants else ""
             raise BackendError(
                 f"no backend{detail} fits {self.settings.gpu_total_gib:.0f} GiB of VRAM"
             )

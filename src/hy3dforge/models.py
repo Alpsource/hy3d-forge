@@ -43,6 +43,13 @@ class JobRequest(GenerateParams):
     backend: str = "auto"
     # Ask for PBR maps; with backend="auto" this restricts selection to capable backends.
     require_pbr: bool = False
+    # Text to 3D: the backend generates an image from this first, then meshes it.
+    # Only backends advertising the "text" capability can serve it.
+    prompt: Optional[str] = None
+
+    @property
+    def is_text_job(self) -> bool:
+        return bool(self.prompt and self.prompt.strip())
 
 
 class Job(BaseModel):

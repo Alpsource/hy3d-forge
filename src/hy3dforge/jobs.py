@@ -46,12 +46,14 @@ class JobQueue:
     def job_dir(self, job_id: str) -> Path:
         return self.artifacts_dir / job_id
 
-    def submit(self, request: JobRequest, image_bytes: bytes, filename: str) -> Job:
+    def submit(self, request: JobRequest, image_bytes: Optional[bytes],
+               filename: Optional[str]) -> Job:
         job_id = uuid.uuid4().hex[:12]
         directory = self.job_dir(job_id)
         directory.mkdir(parents=True, exist_ok=True)
-        suffix = Path(filename).suffix.lower() or ".png"
-        (directory / f"input{suffix}").write_bytes(image_bytes)
+        if image_bytes:
+            suffix = Path(filename or "input.png").suffix.lower() or ".png"
+            (directory / f"input{suffix}").write_bytes(image_bytes)
 
         job = Job(id=job_id, status=JobStatus.queued, created_at=time.time())
         self._jobs[job_id] = job
@@ -177,14 +179,16 @@ class JobQueue:
         job.status = JobStatus.running
         job.started_at = time.time()
 
-        name = self.registry.select(request.backend, request.require_pbr)
+        name = self.registry.select(
+            request.backend, request.require_pbr, request.is_text_job)
         job.backend = name
         backend = await self.registry.acquire(name)
 
         directory = self.job_dir(job.id)
-        image = next(directory.glob("input.*"))
+        # A text job has no upload; the backend renders its own image first.
+        image = next(directory.glob("input.*"), None)
         payload = {
-            "image_path": str(image),
+            "image_path": str(image) if image else None,
             "output_dir": str(directory),
             "params": request.model_dump(exclude={"backend", "require_pbr"}),
         }

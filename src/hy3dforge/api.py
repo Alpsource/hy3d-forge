@@ -82,19 +82,26 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.post("/v1/jobs", response_model=Job, status_code=202, dependencies=[auth])
     async def create_job(
-        image: UploadFile = File(...),
+        image: Optional[UploadFile] = File(None),
         request: JobRequest = Depends(_job_request_form),
     ):
-        data = await image.read()
-        if not data:
-            raise HTTPException(400, "empty image upload")
+        data = await image.read() if image is not None else b""
+        if not data and not request.is_text_job:
+            raise HTTPException(400, "provide an image or a prompt")
+        if data and request.is_text_job:
+            raise HTTPException(400, "provide an image or a prompt, not both")
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(413, f"image exceeds {MAX_UPLOAD_BYTES // 1024 // 1024} MB")
         try:
-            registry.select(request.backend, request.require_pbr)  # fail fast on bad input
+            # fail fast on bad input rather than at the front of the queue
+            registry.select(request.backend, request.require_pbr, request.is_text_job)
         except BackendError as error:
             raise HTTPException(400, str(error)) from error
-        return queue.submit(request, data, image.filename or "input.png")
+        return queue.submit(
+            request,
+            data or None,
+            image.filename if image is not None else None,
+        )
 
     @app.get("/v1/jobs", response_model=List[Job], dependencies=[auth])
     async def list_jobs(limit: int = 50):
@@ -141,6 +148,7 @@ def _job_request_form(
     guidance_scale: float = Form(5.0),
     octree_resolution: int = Form(256),
     seed: int = Form(1234),
+    prompt: Optional[str] = Form(None),
 ) -> JobRequest:
     """Accept the job options as multipart form fields alongside the image."""
     return JobRequest(
@@ -153,6 +161,7 @@ def _job_request_form(
         guidance_scale=guidance_scale,
         octree_resolution=octree_resolution,
         seed=seed,
+        prompt=prompt,
     )
 
 

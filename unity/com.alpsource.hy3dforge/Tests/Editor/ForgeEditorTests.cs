@@ -323,3 +323,65 @@ namespace Hy3dForge.Editor.Tests
         }
     }
 }
+
+namespace Hy3dForge.Editor.Tests
+{
+    public class TextPromptTests
+    {
+        private static ForgeSettings NewSettings() =>
+            ScriptableObject.CreateInstance<ForgeSettings>();
+
+        [Test]
+        public void PromptIsSentWhenProvided()
+        {
+            var form = ForgeClient.BuildForm(null, null, NewSettings(), "a stone statue");
+            var prompt = form.First(s => s.sectionName == "prompt");
+            Assert.AreEqual("a stone statue",
+                System.Text.Encoding.UTF8.GetString(prompt.sectionData));
+        }
+
+        [Test]
+        public void NoImageSectionWhenOnlyAPromptIsGiven()
+        {
+            var form = ForgeClient.BuildForm(null, null, NewSettings(), "a cat");
+            Assert.IsFalse(form.Any(s => s.sectionName == "image"));
+        }
+
+        [Test]
+        public void NoPromptSectionForAnImageJob()
+        {
+            var form = ForgeClient.BuildForm(new byte[] { 1 }, "a.png", NewSettings());
+            Assert.IsFalse(form.Any(s => s.sectionName == "prompt"));
+            Assert.IsTrue(form.Any(s => s.sectionName == "image"));
+        }
+
+        [Test]
+        public void BlankPromptIsNotSent()
+        {
+            var form = ForgeClient.BuildForm(new byte[] { 1 }, "a.png", NewSettings(), "   ");
+            Assert.IsFalse(form.Any(s => s.sectionName == "prompt"));
+        }
+
+        [Test]
+        public void PromptIsTrimmed()
+        {
+            var form = ForgeClient.BuildForm(null, null, NewSettings(), "  a cat  ");
+            var prompt = form.First(s => s.sectionName == "prompt");
+            Assert.AreEqual("a cat", System.Text.Encoding.UTF8.GetString(prompt.sectionData));
+        }
+
+        [Test]
+        public void OptionsStillAccompanyAPromptJob()
+        {
+            var form = ForgeClient.BuildForm(null, null, NewSettings(), "a cat");
+            CollectionAssert.Contains(form.Select(s => s.sectionName).ToList(), "target_face_num");
+        }
+
+        [Test]
+        public void PromptMakesAUsableAssetName()
+        {
+            Assert.AreEqual("a_stone_statue",
+                GeneratedAssetWriter.SanitiseName("a stone statue"));
+        }
+    }
+}

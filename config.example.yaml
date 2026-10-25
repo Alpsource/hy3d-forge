@@ -44,7 +44,7 @@ backends:
     port: 8071
     vram_required_gib: 16.0
     quality: 1          # higher wins when several backends fit
-    capabilities: [albedo]
+    capabilities: [albedo, text]
     startup_timeout: 600
     # Worker flags. Use hunyuan3d-paint-v2-0 for better textures at ~20% more time.
     args: ["--texgen-subfolder", "hunyuan3d-paint-v2-0-turbo"]

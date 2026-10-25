@@ -88,3 +88,54 @@ def test_unknown_remove_background_mode_is_rejected(tmp_path):
             data={"backend": "small", "remove_background": "sometimes"},
         )
         assert response.status_code == 422
+
+
+def build_text_client(tmp_path):
+    """A client whose backend can serve text prompts."""
+    from hy3dforge.api import create_app
+    from hy3dforge.config import BackendConfig, Settings
+
+    settings = Settings(
+        artifacts_dir=tmp_path, gpu_total_gib=24.0,
+        backends=[BackendConfig(name="small", repo_path=".", python="p", worker="w",
+                                port=1, vram_required_gib=16.0, quality=1,
+                                capabilities=["albedo", "text"])],
+    )
+    return TestClient(create_app(settings))
+
+
+def test_prompt_without_image_is_accepted(tmp_path):
+    with build_text_client(tmp_path) as client:
+        response = client.post("/v1/jobs", data={"prompt": "a small stone statue"})
+        assert response.status_code == 202
+
+
+def test_neither_image_nor_prompt_is_rejected(tmp_path):
+    with build_text_client(tmp_path) as client:
+        response = client.post("/v1/jobs", data={})
+        assert response.status_code == 400
+        assert "image or a prompt" in response.json()["detail"]
+
+
+def test_both_image_and_prompt_is_rejected(tmp_path):
+    with build_text_client(tmp_path) as client:
+        response = client.post(
+            "/v1/jobs",
+            files={"image": ("a.png", b"data", "image/png")},
+            data={"prompt": "a cat"},
+        )
+        assert response.status_code == 400
+        assert "not both" in response.json()["detail"]
+
+
+def test_blank_prompt_counts_as_no_prompt(tmp_path):
+    with build_text_client(tmp_path) as client:
+        assert client.post("/v1/jobs", data={"prompt": "   "}).status_code == 400
+
+
+def test_prompt_rejected_when_no_backend_supports_text(tmp_path):
+    # build_client's backend advertises albedo only
+    with build_client(tmp_path) as client:
+        response = client.post("/v1/jobs", data={"prompt": "a cat"})
+        assert response.status_code == 400
+        assert "text" in response.json()["detail"]

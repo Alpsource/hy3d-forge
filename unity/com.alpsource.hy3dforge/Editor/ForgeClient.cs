@@ -128,11 +128,22 @@ namespace Hy3dForge.Editor
 
         /// <summary>Build the multipart form the service expects. Separated out so it can be tested.</summary>
         internal static List<IMultipartFormSection> BuildForm(
-            byte[] image, string fileName, ForgeSettings settings)
+            byte[] image, string fileName, ForgeSettings settings, string prompt = null)
         {
-            return new List<IMultipartFormSection>
+            var sections = new List<IMultipartFormSection>();
+            if (image != null && image.Length > 0)
             {
-                new MultipartFormFileSection("image", image, fileName, ContentTypeFor(fileName)),
+                sections.Add(new MultipartFormFileSection(
+                    "image", image, fileName, ContentTypeFor(fileName)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                sections.Add(new MultipartFormDataSection("prompt", prompt.Trim()));
+            }
+
+            sections.AddRange(new IMultipartFormSection[]
+            {
                 new MultipartFormDataSection("backend", settings.backend),
                 new MultipartFormDataSection("require_pbr", settings.requirePbr ? "true" : "false"),
                 new MultipartFormDataSection("texture", settings.texture ? "true" : "false"),
@@ -144,13 +155,16 @@ namespace Hy3dForge.Editor
                     settings.guidanceScale.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new MultipartFormDataSection("octree_resolution", settings.octreeResolution.ToString()),
                 new MultipartFormDataSection("seed", settings.seed.ToString()),
-            };
+            });
+            return sections;
         }
 
         public async Task<ForgeJob> SubmitAsync(
-            byte[] image, string fileName, ForgeSettings settings, CancellationToken token = default)
+            byte[] image, string fileName, ForgeSettings settings,
+            CancellationToken token = default, string prompt = null)
         {
-            using var request = UnityWebRequest.Post(Url("/v1/jobs"), BuildForm(image, fileName, settings));
+            using var request = UnityWebRequest.Post(
+                Url("/v1/jobs"), BuildForm(image, fileName, settings, prompt));
             Authorise(request);
             await request.SendWebRequest();
             ThrowIfFailed(request);

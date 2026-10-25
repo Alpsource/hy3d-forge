@@ -19,6 +19,9 @@ parser.add_argument("--subfolder", default="hunyuan3d-dit-v2-0")
 parser.add_argument("--texgen-model-path", default="tencent/Hunyuan3D-2")
 parser.add_argument("--texgen-subfolder", default="hunyuan3d-paint-v2-0-turbo")
 parser.add_argument("--low-vram", action="store_true", default=True)
+parser.add_argument("--t2i-model-path",
+                    default="Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled",
+                    help="text-to-image model used for prompt jobs")
 OPTS, _ = parser.parse_known_args()
 
 _state = {}
@@ -52,6 +55,37 @@ def _load():
     return _state
 
 
+def _image_from_prompt(prompt, seed, output_dir):
+    """Render an image from a prompt, then release the text-to-image model.
+
+    This is text to image to 3D, not native text to 3D. The model is loaded per request
+    and dropped again: holding it alongside the shape and paint pipelines would not leave
+    room on a 24 GiB card.
+
+    Note that HunyuanDiTPipeline truncates the prompt to 60 characters and appends its own
+    style suffix, so long descriptions are cut off upstream of us.
+    """
+    import gc
+
+    import torch
+    from hy3dgen.text2image import HunyuanDiTPipeline
+
+    print(f"[{NAME}] loading text-to-image {OPTS.t2i_model_path} "
+          f"(several GB on first use)", flush=True)
+    t2i = HunyuanDiTPipeline(OPTS.t2i_model_path)
+    try:
+        image = t2i(prompt, seed=int(seed))
+    finally:
+        t2i = None  # drop the reference before reclaiming, see hy3d21_worker
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    rendered = output_dir / "prompt_image.png"
+    image.save(rendered)
+    print(f"[{NAME}] prompt image -> {rendered}", flush=True)
+    return image
+
+
 def generate(payload):
     from PIL import Image
 
@@ -62,7 +96,15 @@ def generate(payload):
     output_dir.mkdir(parents=True, exist_ok=True)
     stats, started = {}, time.time()
 
-    image = Image.open(payload["image_path"])
+    prompt = (params.get("prompt") or "").strip()
+    if prompt:
+        step = time.time()
+        image = _image_from_prompt(prompt, params.get("seed", 1234), output_dir)
+        stats["text_to_image_seconds"] = round(time.time() - step, 1)
+    else:
+        image = Image.open(payload["image_path"])
+    # A rendered image usually comes back on a plain background already, but the cutout is
+    # what makes it transparent, which is what the shape model was conditioned on.
     image = prepare_image(image, params.get("remove_background", "auto"), state["rembg"])
 
     step = time.time()
@@ -94,7 +136,7 @@ def generate(payload):
 
     torch.cuda.empty_cache()
     stats.update(total_seconds=round(time.time() - started, 1), faces=len(mesh.faces),
-                 backend=NAME, pbr=False)
+                 backend=NAME, pbr=False, from_prompt=bool(prompt))
     return {"output_path": str(output_path), "stats": stats}
 
 

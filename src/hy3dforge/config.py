@@ -37,6 +37,10 @@ class BackendConfig(BaseModel):
     def supports_pbr(self) -> bool:
         return "pbr" in self.capabilities
 
+    @property
+    def supports_text(self) -> bool:
+        return "text" in self.capabilities
+
 
 class RetentionConfig(BaseModel):
     """How long generated artifacts are kept. Both limits apply; 0 disables one."""

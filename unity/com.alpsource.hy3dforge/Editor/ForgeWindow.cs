@@ -16,7 +16,7 @@ namespace Hy3dForge.Editor
     /// </summary>
     public sealed class ForgeWindow : EditorWindow
     {
-        private enum Mode { Single, Batch }
+        private enum Mode { Single, Batch, Text }
 
         private const string FolderPref = "Hy3dForge.BatchFolder";
 
@@ -27,6 +27,7 @@ namespace Hy3dForge.Editor
         private Vector2 _logScroll;
 
         private string _batchFolder = string.Empty;
+        private string _prompt = string.Empty;
         private bool _recursive;
         private bool _skipExisting = true;
         private int _foundCount = -1;
@@ -71,17 +72,21 @@ namespace Hy3dForge.Editor
 
             using (new EditorGUI.DisabledScope(_busy))
             {
-                _mode = (Mode)GUILayout.Toolbar((int)_mode, new[] { "Single", "Batch" });
+                _mode = (Mode)GUILayout.Toolbar((int)_mode, new[] { "Single", "Batch", "Text" });
             }
 
             EditorGUILayout.Space();
-            if (_mode == Mode.Single)
+            switch (_mode)
             {
-                DrawSingleInput();
-            }
-            else
-            {
-                DrawBatchInput();
+                case Mode.Single:
+                    DrawSingleInput();
+                    break;
+                case Mode.Batch:
+                    DrawBatchInput();
+                    break;
+                default:
+                    DrawTextInput();
+                    break;
             }
 
             EditorGUILayout.Space();
@@ -182,6 +187,29 @@ namespace Hy3dForge.Editor
             // importer, so inputs do not have to be inside Assets.
         }
 
+        private void DrawTextInput()
+        {
+            EditorGUILayout.LabelField("Prompt", EditorStyles.boldLabel);
+            using (new EditorGUI.DisabledScope(_busy))
+            {
+                _prompt = EditorGUILayout.TextArea(_prompt, GUILayout.Height(60));
+            }
+
+            EditorGUILayout.HelpBox(
+                "Text is turned into an image first, then meshed. Only backends with the " +
+                "'text' capability can serve it, and the text-to-image model is a separate " +
+                "multi-gigabyte download on first use.\n" +
+                "The prompt is truncated to 60 characters upstream, so keep it short.",
+                MessageType.Info);
+
+            if (_prompt.Trim().Length > 60)
+            {
+                EditorGUILayout.HelpBox(
+                    $"This prompt is {_prompt.Trim().Length} characters; everything after 60 " +
+                    "will be ignored.", MessageType.Warning);
+            }
+        }
+
         private void DrawOptions()
         {
             EditorGUILayout.LabelField("Options", EditorStyles.boldLabel);
@@ -202,22 +230,26 @@ namespace Hy3dForge.Editor
 
         private void DrawActions()
         {
-            var canRun = _mode == Mode.Single
-                ? _sourceImage != null
-                : _foundCount > 0;
+            bool canRun;
+            switch (_mode)
+            {
+                case Mode.Single: canRun = _sourceImage != null; break;
+                case Mode.Batch: canRun = _foundCount > 0; break;
+                default: canRun = !string.IsNullOrWhiteSpace(_prompt); break;
+            }
 
             using (new EditorGUI.DisabledScope(_busy || !canRun))
             {
-                var label = _mode == Mode.Single ? "Generate" : $"Generate All ({Math.Max(_foundCount, 0)})";
+                var label = _mode == Mode.Batch
+                    ? $"Generate All ({Math.Max(_foundCount, 0)})"
+                    : "Generate";
                 if (GUILayout.Button(label, GUILayout.Height(30)))
                 {
-                    if (_mode == Mode.Single)
+                    switch (_mode)
                     {
-                        _ = RunSingleAsync();
-                    }
-                    else
-                    {
-                        _ = RunBatchAsync();
+                        case Mode.Single: _ = RunSingleAsync(); break;
+                        case Mode.Batch: _ = RunBatchAsync(); break;
+                        default: _ = RunTextAsync(); break;
                     }
                 }
             }
@@ -334,6 +366,55 @@ namespace Hy3dForge.Editor
                     client, bytes, fileName, _sourceImage.name, string.Empty, _cancellation.Token);
                 GeneratedAssetWriter.Reveal(_lastAssetPath);
                 SetStatus("Done.");
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("Cancelled.");
+            }
+            catch (Exception error)
+            {
+                _lastError = error.Message;
+                SetStatus("Failed.");
+                Debug.LogException(error);
+            }
+            finally
+            {
+                EndRun();
+            }
+        }
+
+        private async Task RunTextAsync()
+        {
+            BeginRun();
+            try
+            {
+                _settings.Validate();
+                var client = new ForgeClient(_settings.NormalisedBaseUrl, ForgeSettings.ApiKey);
+                var name = GeneratedAssetWriter.SanitiseName(_prompt);
+
+                SetStatus("Submitting prompt...");
+                var job = await client.SubmitAsync(
+                    null, null, _settings, _cancellation.Token, _prompt);
+
+                var progress = new Progress<ForgeJob>(update =>
+                {
+                    SetStatus(update.status == "queued"
+                        ? $"Queued (position {update.queue_position})..."
+                        : $"Rendering image, then meshing on {update.backend ?? "?"}...");
+                });
+
+                job = await client.WaitForCompletionAsync(
+                    job.id, _settings.timeoutSeconds, progress, _cancellation.Token);
+                if (!job.Succeeded)
+                {
+                    throw new ForgeException(job.error ?? "Generation failed.");
+                }
+
+                SetStatus("Downloading...");
+                var glb = await client.DownloadResultAsync(job.id, _cancellation.Token);
+                _lastAssetPath = GeneratedAssetWriter.Write(glb, name, _settings);
+                GeneratedAssetWriter.Reveal(_lastAssetPath);
+                SetStatus($"Done on {job.backend}.");
             }
             catch (OperationCanceledException)
             {

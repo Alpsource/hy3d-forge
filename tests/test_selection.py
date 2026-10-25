@@ -31,7 +31,7 @@ def test_auto_falls_back_when_vram_is_short():
 
 def test_pbr_requirement_excludes_incapable_backends():
     registry = BackendRegistry(make_settings(18.0))
-    with pytest.raises(BackendError, match="no backend with PBR"):
+    with pytest.raises(BackendError, match="no backend supporting PBR"):
         registry.select("auto", require_pbr=True)
 
 
@@ -44,6 +44,25 @@ def test_explicit_backend_rejects_impossible_pbr_request():
     registry = BackendRegistry(make_settings(24.0))
     with pytest.raises(BackendError, match="cannot produce PBR"):
         registry.select("small", require_pbr=True)
+
+
+def test_text_requirement_excludes_image_only_backends():
+    registry = BackendRegistry(make_settings(24.0))  # neither backend advertises "text"
+    with pytest.raises(BackendError, match="no backend supporting text prompt"):
+        registry.select("auto", require_pbr=False, require_text=True)
+
+
+def test_explicit_backend_rejects_impossible_text_request():
+    registry = BackendRegistry(make_settings(24.0))
+    with pytest.raises(BackendError, match="cannot generate from a text prompt"):
+        registry.select("small", require_pbr=False, require_text=True)
+
+
+def test_text_capable_backend_is_selected_when_available():
+    settings = make_settings(24.0)
+    settings.backends[0].capabilities = ["albedo", "text"]
+    registry = BackendRegistry(settings)
+    assert registry.select("auto", require_pbr=False, require_text=True) == "small"
 
 
 def test_unknown_backend_is_rejected():

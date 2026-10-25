@@ -97,21 +97,45 @@ curl -X POST http://127.0.0.1:8070/v1/jobs \
 # pin a backend explicitly
 curl -X POST http://127.0.0.1:8070/v1/jobs -F image=@cat.png -F backend=hy3d2
 
+# text instead of an image
+curl -X POST http://127.0.0.1:8070/v1/jobs -F prompt="a ceramic teapot"
+
 curl http://127.0.0.1:8070/v1/jobs/<id>
 curl -o model.glb http://127.0.0.1:8070/v1/jobs/<id>/result
 ```
 
-Options: `backend` (`auto` | a name), `require_pbr`, `texture`, `remove_background`
-(`auto` | `always` | `never`), `target_face_num`, `steps`, `guidance_scale`,
-`octree_resolution`, `seed`.
+Options: `backend` (`auto` | a name), `prompt`, `require_pbr`, `texture`,
+`remove_background` (`auto` | `always` | `never`), `target_face_num`, `steps`,
+`guidance_scale`, `octree_resolution`, `seed`.
+
+A job takes an image or a `prompt`, not both.
 
 `remove_background=auto` runs the cutout unless the image already carries transparency.
 That check only inspects the alpha channel, so an image with an alpha channel but a
 background still painted in is wrongly treated as finished; `always` forces the cutout.
 
 `backend=auto` picks the highest `quality` backend whose `vram_required_gib` fits
-`gpu_total_gib`, filtered by `require_pbr`. Lower the VRAM budget and it degrades to a smaller
-backend rather than failing.
+`gpu_total_gib`, filtered by `require_pbr` and by whether a `prompt` was given. Lower the VRAM
+budget and it degrades to a smaller backend rather than failing.
+
+### Text to 3D
+
+A `prompt` is served only by a backend declaring the `text` capability, which today means
+`hy3d2` alone - 2.1 ships no text-to-image model. It is text to image to 3D rather than native
+text to 3D: the backend renders one image from the prompt, saves it beside the mesh as
+`prompt_image.png`, and meshes that. Three consequences are worth knowing before reaching for
+it:
+
+- no PBR, since the only backend that can do it is the albedo-only one;
+- the underlying `HunyuanDiTPipeline` truncates the prompt to **60 characters** and appends its
+  own style suffix, so a long description is cut off before generation;
+- the text-to-image model is a further ~14.5 GB download on first use, loaded per request and
+  released again - it would not fit alongside the shape and paint pipelines on a 24 GiB card;
+- the backend venv needs `sentencepiece`, without which the model dies in its tokenizer with an
+  error that blames tiktoken. The Hunyuan3D-2 fork lists it; an older checkout may not.
+
+Generating the concept image in a tool you control and submitting that gives the same pipeline
+with far more say over what gets meshed.
 
 ## Measured on a Quadro RTX 6000 (24 GiB)
 

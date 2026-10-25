@@ -27,3 +27,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = [
+    # Raised by fastapi.testclient importing starlette's client, not by our code. The
+    # suggested remedy is to swap the whole HTTP stack for httpx2, which is not worth
+    # doing for a test-only deprecation.
+    "ignore:Using .httpx. with .starlette.testclient. is deprecated.*",
+]

@@ -9,14 +9,14 @@ hardware; on a larger card, raise `keep_resident` to hold both.
 from __future__ import annotations
 
 import argparse
-import gc
 import os
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from worker_common import prepare_image, run_worker  # noqa: E402
+from worker_common import (prepare_image, release_vram, reset_vram_peak,
+                           run_worker, vram_peak_gib)  # noqa: E402
 
 # The repo's own modules expect to be importable from the checkout root.
 sys.path.insert(0, ".")
@@ -41,25 +41,6 @@ except Exception as error:  # pragma: no cover
     print(f"[{NAME}] torchvision_fix unavailable: {error}", flush=True)
 
 _resident = {}
-
-
-def _release_vram(label=""):
-    """Return freed blocks to the driver.
-
-    The caller must drop its own reference first. Passing an object into a helper and
-    deleting it there frees nothing: the caller's variable still holds it, and so does the
-    helper's argument tuple, so the allocation survives and empty_cache() has nothing to
-    reclaim.
-    """
-    import torch
-
-    gc.collect()
-    torch.cuda.empty_cache()
-    if label:
-        allocated = torch.cuda.memory_allocated() / 2 ** 30
-        reserved = torch.cuda.memory_reserved() / 2 ** 30
-        print(f"[{NAME}] vram after {label}: allocated {allocated:.1f} GiB, "
-              f"reserved {reserved:.1f} GiB", flush=True)
 
 
 def _shape_pipeline():
@@ -101,6 +82,7 @@ def generate(payload):
     output_dir = Path(payload["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     stats, started = {}, time.time()
+    reset_vram_peak()
 
     image_path = payload["image_path"]
     original = Image.open(image_path)
@@ -112,7 +94,7 @@ def generate(payload):
 
     step = time.time()
     shape = _shape_pipeline()
-    _release_vram("shape loaded")
+    release_vram(NAME, "shape loaded")
     mesh = shape(image=image)[0]
     stats["shape_seconds"] = round(time.time() - step, 1)
 
@@ -124,11 +106,12 @@ def generate(payload):
     mesh.export(white_path)
     if not OPTS.keep_resident:
         shape = None  # drop the last reference before reclaiming
-        _release_vram("shape released")
+        release_vram(NAME, "shape released")
 
     if not bool(params.get("texture", True)):
         stats.update(total_seconds=round(time.time() - started, 1),
-                     faces=len(mesh.faces), backend=NAME, pbr=False)
+                     faces=len(mesh.faces), backend=NAME, pbr=False,
+                     peak_vram_gib=vram_peak_gib())
         return {"output_path": str(white_path), "stats": stats}
 
     step = time.time()
@@ -139,15 +122,17 @@ def generate(payload):
     stats["texture_seconds"] = round(time.time() - step, 1)
     if not OPTS.keep_resident:
         paint = None
-        _release_vram("paint released")
+        release_vram(NAME, "paint released")
 
     output_path = output_obj.with_suffix(".glb")
     if not output_path.exists():
         raise RuntimeError(f"paint stage produced no GLB at {output_path}")
 
-    _release_vram("job complete")
+    peak = vram_peak_gib()
+    release_vram(NAME, "job complete")
     stats.update(total_seconds=round(time.time() - started, 1), faces=len(mesh.faces),
-                 backend=NAME, pbr=True, views=OPTS.max_num_view, resolution=OPTS.resolution)
+                 backend=NAME, pbr=True, views=OPTS.max_num_view,
+                 resolution=OPTS.resolution, peak_vram_gib=peak)
     return {"output_path": str(output_path), "stats": stats}
 
 

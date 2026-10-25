@@ -9,7 +9,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from worker_common import prepare_image, run_worker  # noqa: E402
+from worker_common import (prepare_image, release_vram, reset_vram_peak,
+                           run_worker, vram_peak_gib)  # noqa: E402
 
 NAME = "hy3d2"
 
@@ -65,9 +66,6 @@ def _image_from_prompt(prompt, seed, output_dir):
     Note that HunyuanDiTPipeline truncates the prompt to 60 characters and appends its own
     style suffix, so long descriptions are cut off upstream of us.
     """
-    import gc
-
-    import torch
     from hy3dgen.text2image import HunyuanDiTPipeline
 
     print(f"[{NAME}] loading text-to-image {OPTS.t2i_model_path} "
@@ -76,9 +74,8 @@ def _image_from_prompt(prompt, seed, output_dir):
     try:
         image = t2i(prompt, seed=int(seed))
     finally:
-        t2i = None  # drop the reference before reclaiming, see hy3d21_worker
-        gc.collect()
-        torch.cuda.empty_cache()
+        t2i = None  # drop the last reference before reclaiming
+        release_vram(NAME, "text-to-image released")
 
     rendered = output_dir / "prompt_image.png"
     image.save(rendered)
@@ -95,6 +92,7 @@ def generate(payload):
     output_dir = Path(payload["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     stats, started = {}, time.time()
+    reset_vram_peak()
 
     prompt = (params.get("prompt") or "").strip()
     if prompt:
@@ -134,9 +132,11 @@ def generate(payload):
     output_path = output_dir / "model.glb"
     mesh.export(output_path, include_normals=textured)
 
-    torch.cuda.empty_cache()
+    peak = vram_peak_gib()
+    release_vram(NAME, "job complete")
     stats.update(total_seconds=round(time.time() - started, 1), faces=len(mesh.faces),
-                 backend=NAME, pbr=False, from_prompt=bool(prompt))
+                 backend=NAME, pbr=False, from_prompt=bool(prompt),
+                 peak_vram_gib=peak)
     return {"output_path": str(output_path), "stats": stats}
 
 

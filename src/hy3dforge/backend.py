@@ -90,7 +90,13 @@ class BackendProcess:
                     continue
                 self._recent.append(line)
                 del self._recent[:-self._RECENT_LINES]
-                logger.info("[%s] %s", self.config.name, line)
+                # Workers label their own output so they stay readable when run by hand.
+                # Do not label it twice.
+                prefix = f"[{self.config.name}]"
+                if line.startswith(prefix):
+                    logger.info("%s", line)
+                else:
+                    logger.info("%s %s", prefix, line)
         except Exception:  # the pipe closes when the worker exits
             pass
 

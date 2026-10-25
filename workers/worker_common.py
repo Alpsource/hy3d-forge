@@ -43,6 +43,53 @@ def prepare_image(image, mode, rembg):
     return image if already_cut_out else rembg(image.convert("RGB"))
 
 
+def release_vram(backend, label=""):
+    """Return freed blocks to the driver, and report what is still held.
+
+    The caller must drop its own reference first. Passing an object into a helper and
+    deleting it there frees nothing: the caller's variable still holds it, and so does the
+    helper's argument tuple, so the allocation survives and empty_cache() has nothing to
+    reclaim.
+
+    The numbers printed are torch's own. `allocated` is what live tensors hold; `reserved`
+    is what torch keeps in its caching allocator, which it hands back to the driver here.
+    nvidia-smi will still show the process above both: the CUDA context alone costs a few
+    hundred MiB and is returned only when the process exits, which is why the router stops
+    an idle backend instead of trying to free it in place.
+    """
+    import gc
+
+    import torch
+
+    gc.collect()
+    torch.cuda.empty_cache()
+    allocated = torch.cuda.memory_allocated() / 2 ** 30
+    reserved = torch.cuda.memory_reserved() / 2 ** 30
+    if label:
+        print(f"[{backend}] vram after {label}: allocated {allocated:.1f} GiB, "
+              f"reserved {reserved:.1f} GiB", flush=True)
+    return allocated, reserved
+
+
+def reset_vram_peak():
+    """Start a job's peak-usage measurement from zero."""
+    import torch
+
+    torch.cuda.reset_peak_memory_stats()
+
+
+def vram_peak_gib():
+    """Highest allocation reached since the last reset, reported in the job's stats.
+
+    This is the number that says whether a job fits a given card, and it is the one to
+    watch across repeated jobs: a peak that climbs run after run means something is being
+    held that should have been released.
+    """
+    import torch
+
+    return round(torch.cuda.max_memory_allocated() / 2 ** 30, 1)
+
+
 def run_worker(name: str, generate: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:
     """Serve `generate` over HTTP until terminated."""
     parser = argparse.ArgumentParser()

@@ -142,7 +142,18 @@ with far more say over what gets meshed.
 | backend | job | peak VRAM | time |
 |---|---|---|---|
 | hy3d2 | albedo, 8k faces, 30 steps | ~6.5 GiB | 54 s |
+| hy3d2 | the same, from a text prompt | ~14.5 GiB | 97 s |
 | hy3d21 | PBR, 8k faces | 22.7 GiB | 219 s |
+
+A text job peaks where it does because the text-to-image model is on the card at the same
+time as the resident shape and paint pipelines. It is released as soon as the image exists,
+and a worker that has run text jobs settles back to the same resting usage as one that has
+not - measured across consecutive runs, 5.0 GiB allocated after each.
+
+Every job reports `peak_vram_gib` in its stats. That figure is torch's own peak allocation,
+so it is lower than the nvidia-smi column above, which also counts the CUDA context and what
+the rasterizer allocates outside torch. Use it as a relative measure: a peak that climbs run
+after run is the signature of something being held that should have been released.
 
 A cold backend adds its model load to the first job - about 10 s to the first VRAM
 allocation. It then stays resident for `backend_idle_timeout`, so later jobs skip that.

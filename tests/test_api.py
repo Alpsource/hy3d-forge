@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from hy3dforge import __version__
 from hy3dforge.api import create_app
 from hy3dforge.config import BackendConfig, Settings
 
@@ -20,7 +21,11 @@ def build_client(tmp_path):
 
 def test_healthz(tmp_path):
     with build_client(tmp_path) as client:
-        assert client.get("/healthz").json() == {"status": "ok"}
+        body = client.get("/healthz").json()
+    assert body["status"] == "ok"
+    # Unauthenticated on purpose: "which build is that box running" is the first support
+    # question, and a probe should not need a key to answer it.
+    assert body["version"] == __version__
 
 
 def test_backends_listed(tmp_path):

@@ -15,6 +15,7 @@ from typing import List, Optional
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from . import __version__
 from .backend import BackendError
 from .config import Settings, load_settings
 from .jobs import JobQueue
@@ -74,7 +75,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz():
-        return {"status": "ok"}
+        # Open, so a load balancer can probe it. The version is here rather than behind
+        # auth because "which build is that box running" is the first support question.
+        return {"status": "ok", "version": __version__}
 
     @app.get("/v1/backends", response_model=List[BackendInfo], dependencies=[auth])
     async def backends():

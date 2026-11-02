@@ -27,6 +27,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Pinned rather than left to default: pytest-asyncio warns while this is unset and
+# intends to change the default, which would silently alter fixture lifetimes.
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     # Raised by fastapi.testclient importing starlette's client, not by our code. The
     # suggested remedy is to swap the whole HTTP stack for httpx2, which is not worth

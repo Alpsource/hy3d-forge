@@ -125,3 +125,13 @@ Unity -batchmode -nographics -projectPath <project> \
 One rule worth knowing if you extend this: **never block the main thread waiting on a
 `UnityWebRequest`**. Its completion is delivered on that thread, so blocking deadlocks the
 editor. Everything here is `async`/`await` throughout.
+
+## Licence
+
+[PolyForm Small Business License 1.0.0](LICENSE.md) - free for companies under 100 people
+and $1M revenue, including games you sell; a commercial licence above that. The terms and
+the price are in [COMMERCIAL.md](../../COMMERCIAL.md).
+
+This package and the service behind it are the licensed work. The model backends the service
+runs are separate projects under their own terms, which the service's `setup` makes you
+accept directly.

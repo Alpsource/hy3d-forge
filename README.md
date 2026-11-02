@@ -4,6 +4,9 @@ A self-hosted image-to-3D service. It puts one stable HTTP API in front of sever
 Hunyuan3D releases and picks the right one per job, so a client - a game engine, a script,
 a web page - never has to know which model ran.
 
+Free for individuals and companies under 100 people and $1M revenue; a commercial
+licence above that. See [COMMERCIAL.md](COMMERCIAL.md).
+
 ```
 POST /v1/jobs  (image + options)  ->  202 {"id": "...", "status": "queued"}
 GET  /v1/jobs/{id}                ->  status, timings, backend used
@@ -227,6 +230,20 @@ With no keys configured the API is unauthenticated, which is fine on loopback. *
 non-loopback address without keys is refused** - an open generate endpoint is a free GPU for
 whoever finds it. Override with `allow_insecure: true` if you really mean it, and put a
 reverse proxy with TLS in front before exposing it.
+
+## Licence
+
+hy3dforge is under the [PolyForm Small Business License 1.0.0](LICENSE). If your company has
+fewer than 100 people and made less than $1,000,000 last tax year, you may use it for
+anything, including games you sell, at no cost. Above either threshold it needs a commercial
+licence - [COMMERCIAL.md](COMMERCIAL.md) has the terms and the price.
+
+The licence is PolyForm's published text rather than a bespoke one, so a buyer's lawyers are
+reading something other companies already use instead of auditing an invented document.
+
+This covers **this repository only**: the router, workers, CLI and Unity package. The model
+backends are separate projects under their own terms, which `setup` makes you accept
+directly - see above, and [THIRD-PARTY.md](THIRD-PARTY.md) for the full dependency list.
 
 ## Notes
 

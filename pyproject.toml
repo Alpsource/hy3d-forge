@@ -1,8 +1,13 @@
 [project]
 name = "hy3dforge"
-version = "0.1.0"
+version = "1.0.0"
 description = "Self-hosted image-to-3D service that routes jobs across Hunyuan3D backends"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "PolyForm-Small-Business-1.0.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Alpsource" }]
+keywords = ["3d", "mesh-generation", "hunyuan3d", "self-hosted"]
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
@@ -19,7 +24,7 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 hy3dforge = "hy3dforge.cli:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

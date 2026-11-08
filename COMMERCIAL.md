@@ -1,26 +1,43 @@
-# Commercial licensing
+# Licensing and what costs money
 
-hy3dforge is released under the [PolyForm Small Business License 1.0.0](LICENSE). Most
-people who will ever run it never need to read further than this paragraph: if your company
-has **fewer than 100 people** and made **less than $1,000,000** in its last tax year, you
-already have a licence, for anything you want to build, including games you sell. Nothing to
-buy, nobody to email.
+Two pieces, licensed differently.
 
-Above either threshold, you need a commercial licence. That is the whole business model.
+**The backend** - this repository, the thing that actually generates meshes - is under the
+[PolyForm Small Business License 1.0.0](LICENSE). If your company has **fewer than 100
+people** and made **less than $1,000,000** in its last tax year, you already have a licence
+for anything you want to build, including games you sell. Nothing to buy, nobody to email.
 
-## Why this split
+**The Unity Editor client** is sold on the Unity Asset Store for **$4.99**. It is the only
+part with a price tag for most people, and it is optional: the HTTP API is documented and
+anyone can write their own client, or drive it with `curl`.
 
-Hobbyists and small studios are the people who try a new tool, file the issues and tell
-other developers about it. Charging them $0 is not charity, it is how the project gets good
-enough to be worth money to anyone else. Studios past the threshold have a procurement
-process and a budget line for tooling, and they would rather pay for something supported than
-explain an unlicensed dependency to their legal team.
+## Why the paid part is the small part
 
-The thresholds are PolyForm's, not invented here, and that is deliberate. A custom licence
-with a custom revenue number means every buyer's lawyers read it from scratch. A published,
-professionally drafted one that other companies already use gets waved through.
+An honour-system licence on a self-hosted backend collects almost nothing. Nobody fills in a
+revenue declaration for software they already have working, and chasing them would cost more
+than it raised. Putting the price on the editor client instead means Unity handles payment,
+VAT and refunds, and the amount is small enough that nobody has to think about it.
 
-## What a commercial licence costs
+So the backend is free to the people most likely to try it, and the client is cheap enough to
+buy on impulse. Neither decision is generosity; it is the only arrangement where money
+actually arrives.
+
+## The Unity client
+
+Asset Store listing: *(pending review)*
+
+$4.99, under Unity's standard Asset Store EULA. Available to any company of any size - the
+PolyForm thresholds do not apply to it, because it is not distributed under PolyForm.
+
+It needs this backend running on a machine you control, with an NVIDIA GPU. 8 GB of VRAM for
+the smaller model, 24 GB for the PBR one. Nothing is uploaded anywhere and there is no
+per-asset fee.
+
+## Backend commercial licence
+
+Over 100 people or over $1M revenue, you need one. **This is separate from the Asset Store
+purchase** - buying the $4.99 client does not license the backend, and a large studio needs
+both. Worth saying plainly because the split is easy to miss.
 
 | | Free | Studio | Perpetual |
 |---|---|---|---|
@@ -30,24 +47,22 @@ professionally drafted one that other companies already use gets waved through.
 | Updates | all | all, while subscribed | the version you bought, plus 12 months |
 | Support | public issue tracker | email, 2 business days | email, 12 months |
 
-Per *company*, not per seat or per machine — the thing being licensed is the right to use it
+Per *company*, not per seat or per machine - the thing being licensed is the right to use it
 commercially, and metering seats on self-hosted software is a tax on honest customers.
 
 There is no licence key, no activation and no phone-home. The software behaves identically
-either way. This is an honour system backed by a written threshold, which is what every
-source-available licence in this category relies on.
+either way.
 
-## Buying one
+### Buying one
 
-Email **demirel@ee.hacettepe.edu.tr** with your company name and rough headcount. You get an
-invoice and a countersigned licence document naming your company.
+Email **binarybrainofficial@gmail.com** with your company name and rough headcount. You get
+an invoice and a countersigned licence document naming your company.
 
 Payment in USD or EUR by bank transfer; Turkish companies can be invoiced in TRY.
 
 ## What you are licensing, and what you are not
 
-A commercial licence covers **this repository**: the router, the workers, the CLI and the
-Unity package.
+Either licence covers **this repository**: the router, the workers and the CLI.
 
 It does **not** cover the model backends. They are separate projects with their own terms,
 cloned from their own upstreams by `hy3dforge setup`, which shows you each licence and makes
@@ -61,15 +76,17 @@ before building a business on it:
   weights.
 - Above 1 million monthly active users, Tencent requires a separate licence.
 
-Buying a commercial licence to hy3dforge does not change either of those, because they are
-not mine to change. What it buys is the orchestration layer around them, which is the part
-this repository actually wrote.
+No licence sold here changes either of those, because they are not mine to change. What is
+being sold is the orchestration layer around them, which is the part this repository wrote.
 
 ## Questions people ask first
 
 **Can I ship games made with it?** Yes, under either licence. The output is yours; the
 licence is about running the software, not about what it generates. Check the backend's terms
 for its own view on output - Tencent's is in the README.
+
+**Do I have to buy the Unity client?** No. It is a convenience. The API is documented above
+and the service speaks ordinary HTTP.
 
 **Can I host it for my own team?** Yes. Internal use across a company is use by that company.
 
@@ -83,3 +100,7 @@ changes and new works. You may redistribute it, but you must pass on the same li
 
 **We are over the threshold but only evaluating.** Evaluate freely and talk to me when you
 decide. Nobody has ever been sued into becoming a customer.
+
+---
+
+Copyright 2026 Alp Demirel (Binary Brain), Ankara. <https://binarybrain.tech>

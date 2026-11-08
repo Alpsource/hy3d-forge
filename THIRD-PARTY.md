@@ -1,9 +1,9 @@
 # Third-party software
 
 Nothing in this list is vendored into this repository. The Python packages are resolved by
-pip at install time and the Unity package by the Package Manager, so what you receive from
-here is this project's own source only. The list exists because a studio's legal review will
-ask for it, and the answer is short: everything is permissive.
+pip at install time, so what you receive from here is this project's own source only. The
+list exists because a studio's legal review will ask for it, and the answer is short:
+everything is permissive.
 
 ## Router and workers
 
@@ -21,16 +21,6 @@ ask for it, and the answer is short: everything is permissive.
 
 The workers themselves import nothing outside the standard library. Whatever a backend's own
 virtualenv holds is that backend's dependency tree, not this project's.
-
-## Unity package
-
-| package | licence |
-|---|---|
-| com.unity.cloud.gltfast | Apache-2.0, Unity Technologies and the Unity glTFast authors |
-
-glTFast is a declared dependency in `package.json`; the Package Manager fetches it. It is
-what lets Unity read a `.glb` at all, and it understands PBR metallic-roughness, so meshes
-from the 2.1 backend arrive with their maps wired up instead of flattened.
 
 ## Model backends
 

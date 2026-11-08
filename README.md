@@ -5,7 +5,8 @@ Hunyuan3D releases and picks the right one per job, so a client - a game engine,
 a web page - never has to know which model ran.
 
 Free for individuals and companies under 100 people and $1M revenue; a commercial
-licence above that. See [COMMERCIAL.md](COMMERCIAL.md).
+licence above that. The optional Unity editor client is $4.99 on the Asset Store.
+See [COMMERCIAL.md](COMMERCIAL.md).
 
 ```
 POST /v1/jobs  (image + options)  ->  202 {"id": "...", "status": "queued"}
@@ -191,15 +192,13 @@ that cost disappears.
 
 ## Unity
 
-A Unity 6 editor package lives in `unity/com.alpsource.hy3dforge`. Install it through the
-Package Manager with:
+A Unity 6 editor package generates assets straight into a project - pick an image or type
+a prompt, press Generate, and the mesh is imported as a prefab. It is sold separately on
+the Unity Asset Store for $4.99; see [COMMERCIAL.md](COMMERCIAL.md).
 
-```
-https://github.com/Alpsource/hy3d-forge.git?path=/unity/com.alpsource.hy3dforge
-```
-
-Pick an image, press Generate, and the mesh is imported into the project. See its
-[README](unity/com.alpsource.hy3dforge/README.md).
+It is a convenience, not a requirement. The API below is the whole contract, it is plain
+HTTP with multipart uploads, and a client is a few dozen lines in any language. If you
+would rather write your own, nothing here is in your way.
 
 ## Retention
 
@@ -238,12 +237,19 @@ fewer than 100 people and made less than $1,000,000 last tax year, you may use i
 anything, including games you sell, at no cost. Above either threshold it needs a commercial
 licence - [COMMERCIAL.md](COMMERCIAL.md) has the terms and the price.
 
+The Unity editor client is not part of this repository and not under this licence. It is
+sold on the Asset Store under Unity's standard EULA, where any company of any size can
+buy it - though a company past the thresholds above still needs a licence for the backend
+it talks to, which is a separate thing.
+
 The licence is PolyForm's published text rather than a bespoke one, so a buyer's lawyers are
 reading something other companies already use instead of auditing an invented document.
 
-This covers **this repository only**: the router, workers, CLI and Unity package. The model
+This covers **this repository only**: the router, the workers and the CLI. The model
 backends are separate projects under their own terms, which `setup` makes you accept
 directly - see above, and [THIRD-PARTY.md](THIRD-PARTY.md) for the full dependency list.
+
+Copyright 2026 Alp Demirel (Binary Brain), Ankara. <https://binarybrain.tech>
 
 ## Notes
 

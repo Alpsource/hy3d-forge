@@ -4,6 +4,22 @@ Versions follow [semantic versioning](https://semver.org). The HTTP API carries 
 version in the path (`/v1`); a breaking change there would mean `/v2` alongside it, not a
 silent change under the same route.
 
+## 1.1.0
+
+The Unity editor client has moved out of this repository. It is sold separately on the Unity
+Asset Store; the backend stays open source under the same licence it had.
+
+**Breaking for anyone who installed the Unity package by git URL.** That URL no longer
+resolves. The package is now installed through the Asset Store instead, and its id changed
+from `com.alpsource.hy3dforge` to `com.binarybrain.hy3dforge`.
+
+Nothing about the service changed. Same `/v1` contract, same behaviour, same options - a
+client written against 1.0.0 needs no change.
+
+- Copyright holder named properly: Alp Demirel (Binary Brain), Ankara.
+- README, COMMERCIAL.md and THIRD-PARTY.md updated for the split, including the point that
+  buying the $4.99 client does not license the backend for a company over the thresholds.
+
 ## 1.0.0
 
 First released version. Everything below already worked before this tag; what makes it 1.0.0

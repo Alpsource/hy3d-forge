@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 from hy3dforge.bootstrap import (SetupError, clone_backend, current_ref, install_backend,
-                                 license_notice, setup)
+                                 license_notice, preflight, setup)
 from hy3dforge.config import BackendConfig, Settings, load_settings
 
 
@@ -32,6 +32,18 @@ def make_backend(tmp_path, origin, ref="main"):
         python=tmp_path / "checkout" / "env" / "bin" / "python",
         worker=tmp_path / "worker.py", port=1,
     )
+
+
+
+@pytest.fixture(autouse=True)
+def _preflight_passes(monkeypatch):
+    """Let the setup tests run on a machine without a GPU or a CUDA toolchain.
+
+    setup() now preflights the host, which these tests are not about. The preflight's own
+    behaviour is checked explicitly further down, where each input is set deliberately.
+    """
+    monkeypatch.setattr("hy3dforge.bootstrap._gpu_total_gib", lambda: 24.0)
+    monkeypatch.setattr("hy3dforge.bootstrap.shutil.which", lambda name: f"/usr/bin/{name}")
 
 
 def test_clone_creates_the_checkout(tmp_path):
@@ -180,3 +192,93 @@ def test_the_shipped_config_declares_both_tencent_licences():
         assert backend.license_url.startswith("https://")
         assert "EU" in notice and "South Korea" in notice
         assert "1 million monthly active users" in notice
+
+
+# --- preflight -------------------------------------------------------------------------
+#
+# The point of these is that an install which cannot succeed should say so in seconds
+# rather than after downloading 20 GiB and stopping in a compiler error.
+
+
+def preflight_settings(tmp_path, gpu_total_gib=24.0):
+    backend = BackendConfig(
+        name="b", repo_path=tmp_path / "checkout",
+        python=tmp_path / "checkout" / "env" / "bin" / "python",
+        worker=tmp_path / "worker.py", port=1,
+    )
+    return Settings(artifacts_dir=tmp_path, gpu_total_gib=gpu_total_gib, backends=[backend])
+
+
+def test_a_healthy_machine_has_nothing_to_report(tmp_path):
+    settings = preflight_settings(tmp_path)
+    assert preflight(settings, settings.backends) == []
+
+
+def test_missing_git_is_fatal(tmp_path, monkeypatch):
+    monkeypatch.setattr("hy3dforge.bootstrap.shutil.which",
+                        lambda name: None if name == "git" else f"/usr/bin/{name}")
+    settings = preflight_settings(tmp_path)
+    assert any("git" in p for p in preflight(settings, settings.backends))
+
+
+def test_no_gpu_is_fatal(tmp_path, monkeypatch):
+    monkeypatch.setattr("hy3dforge.bootstrap._gpu_total_gib", lambda: None)
+    settings = preflight_settings(tmp_path)
+    assert any("NVIDIA" in p for p in preflight(settings, settings.backends))
+
+
+def test_setup_stops_before_touching_anything_when_preflight_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr("hy3dforge.bootstrap._gpu_total_gib", lambda: None)
+    settings = preflight_settings(tmp_path)
+    assert setup(settings) == 2
+    assert not (tmp_path / "checkout").exists()
+
+
+def test_a_config_claiming_more_vram_than_the_card_has_warns(tmp_path, monkeypatch, caplog):
+    # The trap this exists for: the shipped config says 24 GiB, so someone with a 12 GiB
+    # card who changes nothing gets a backend selected that cannot load.
+    monkeypatch.setattr("hy3dforge.bootstrap._gpu_total_gib", lambda: 12.0)
+    settings = preflight_settings(tmp_path, gpu_total_gib=24.0)
+    with caplog.at_level("WARNING"):
+        assert preflight(settings, settings.backends) == []
+    assert "gpu_total_gib" in caplog.text
+    assert "12.0" in caplog.text
+
+
+def test_a_smaller_card_than_configured_is_not_warned_about(tmp_path, monkeypatch, caplog):
+    # Configuring less than the card holds is deliberate - leaving room for a display, say.
+    monkeypatch.setattr("hy3dforge.bootstrap._gpu_total_gib", lambda: 24.0)
+    settings = preflight_settings(tmp_path, gpu_total_gib=16.0)
+    with caplog.at_level("WARNING"):
+        preflight(settings, settings.backends)
+    assert "gpu_total_gib" not in caplog.text
+
+
+def test_missing_nvcc_warns_when_a_venv_must_be_built(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr("hy3dforge.bootstrap.shutil.which",
+                        lambda name: None if name == "nvcc" else f"/usr/bin/{name}")
+    settings = preflight_settings(tmp_path)
+    with caplog.at_level("WARNING"):
+        assert preflight(settings, settings.backends) == []
+    assert "nvcc" in caplog.text
+
+
+def test_missing_nvcc_is_quiet_when_every_venv_is_already_built(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr("hy3dforge.bootstrap.shutil.which",
+                        lambda name: None if name == "nvcc" else f"/usr/bin/{name}")
+    settings = preflight_settings(tmp_path)
+    built = settings.backends[0].python
+    built.parent.mkdir(parents=True)
+    built.touch()
+    settings.backends[0].repo_path.mkdir(exist_ok=True)
+    with caplog.at_level("WARNING"):
+        preflight(settings, settings.backends)
+    assert "nvcc" not in caplog.text
+
+
+def test_short_disk_warns(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr("hy3dforge.bootstrap._free_gib", lambda path: 3.0)
+    settings = preflight_settings(tmp_path)
+    with caplog.at_level("WARNING"):
+        assert preflight(settings, settings.backends) == []
+    assert "GiB free" in caplog.text

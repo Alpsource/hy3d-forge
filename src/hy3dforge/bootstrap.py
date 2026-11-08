@@ -17,6 +17,7 @@ said so explicitly.
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 import sys
@@ -142,6 +143,86 @@ def verify_backend(backend: BackendConfig) -> None:
         raise SetupError(f"{backend.name}: missing after setup: {', '.join(missing)}")
 
 
+# Measured on a working install: a backend's virtualenv is about 8 GiB, its weights about
+# 10 GiB more, and the checkout itself is noise beside those. Round up for slack.
+GIB_PER_BACKEND = 20.0
+
+
+def _gpu_total_gib() -> Optional[float]:
+    """Total VRAM of the first GPU, or None when nvidia-smi cannot tell us."""
+    try:
+        out = _run(["nvidia-smi", "--query-gpu=memory.total",
+                    "--format=csv,noheader,nounits"])
+    except (SetupError, OSError):
+        return None
+    first = out.strip().splitlines()[0].strip() if out.strip() else ""
+    try:
+        return int(first) / 1024
+    except ValueError:
+        return None
+
+
+def _free_gib(path: Path) -> Optional[float]:
+    """Free space on the filesystem holding the nearest existing parent of path."""
+    probe = path
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    try:
+        return shutil.disk_usage(probe).free / 1024 ** 3
+    except OSError:
+        return None
+
+
+def preflight(settings: Settings, selected: List[BackendConfig]) -> List[str]:
+    """Check the obvious prerequisites before an install that takes most of an hour.
+
+    Returns the fatal problems. Anything merely suspicious is logged as a warning instead:
+    a heuristic that refuses to run on a machine that would have worked is worse than one
+    that nags, and only the installer knows what their box really has.
+    """
+    fatal: List[str] = []
+
+    if shutil.which("git") is None:
+        fatal.append("git is not on PATH, so no backend can be cloned")
+
+    vram = _gpu_total_gib()
+    if vram is None:
+        fatal.append(
+            "nvidia-smi reported no GPU. These backends need an NVIDIA card with CUDA, and "
+            "there is no CPU path worth running - a mesh would take hours."
+        )
+    elif vram + 0.5 < settings.gpu_total_gib:
+        # Selection trusts the config, so an optimistic value picks a backend that cannot
+        # fit and the failure surfaces much later, as an out-of-memory error mid-job.
+        logger.warning(
+            "config says gpu_total_gib: %.1f but this card reports %.1f GiB. Backend "
+            "selection uses the config value, so it will choose a backend too large to "
+            "load. Set gpu_total_gib to %.1f in config.yaml.",
+            settings.gpu_total_gib, vram, vram)
+
+    building = [b for b in selected if not b.python.exists()]
+    if building and shutil.which("nvcc") is None:
+        logger.warning(
+            "nvcc is not on PATH, and %s still need their virtualenv built. They compile "
+            "CUDA extensions from source, which is the most common way this install fails. "
+            "Install the CUDA toolkit matching your driver before continuing.",
+            ", ".join(b.name for b in building))
+
+    installing = [b for b in selected if not b.repo_path.exists() or not b.python.exists()]
+    if installing:
+        needed = GIB_PER_BACKEND * len(installing)
+        for label, where in (("the backends", installing[0].repo_path.parent),
+                             ("model weights", Path.home() / ".cache")):
+            free = _free_gib(where)
+            if free is not None and free < needed:
+                logger.warning(
+                    "%.0f GiB free at %s, and %s need roughly %.0f GiB for %d backend(s). "
+                    "The install will fail part-way through, having downloaded most of it.",
+                    free, where, label, needed, len(installing))
+
+    return fatal
+
+
 def setup(settings: Settings, only: Optional[Iterable[str]] = None,
           accept_licenses: bool = False) -> int:
     """Clone, install and verify each selected backend. Returns a process exit code."""
@@ -154,6 +235,12 @@ def setup(settings: Settings, only: Optional[Iterable[str]] = None,
             return 2
     if not selected:
         logger.error("no backends selected")
+        return 2
+
+    blocking = preflight(settings, selected)
+    if blocking:
+        for problem in blocking:
+            logger.error("%s", problem)
         return 2
 
     failures = []

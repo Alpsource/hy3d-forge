@@ -74,7 +74,13 @@ hy3dforge setup          # clones and installs the backends declared in config.y
 hy3dforge serve
 ```
 
-`setup` clones each backend at its pinned `repo_ref`, runs that repo's own installer to build
+`setup` first checks the machine: without `git` or a GPU that `nvidia-smi` can see it stops
+immediately rather than part-way through a download, and it warns about a missing `nvcc`, too
+little disk, or a `gpu_total_gib` larger than the card actually has. That last one is the
+common mistake - the shipped config says 24, and backend selection trusts it, so leaving it
+alone on a smaller card picks a backend that cannot load.
+
+It then clones each backend at its pinned `repo_ref`, runs that repo's own installer to build
 its virtualenv and compile its CUDA extensions, and verifies the result. Existing checkouts
 are detected and left untouched, so an already-working tree keeps working. Install a subset
 with `--backend hy3d2`, which is worth doing if you only have VRAM for the smaller model.
